@@ -1,0 +1,14 @@
+name: PIKAN-unbounded-domains-env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python==3.12.3
+  - torch==2.4.0
+  - numpy==1.26.0
+  - matplotlib==3.9.0
+  - tqdm==4.66.0
+  - seaborn==0.13.0
+  - pykan==0.2.8
+  - scikit-learn==1.7.2
+  - pyyaml==6.0.3
