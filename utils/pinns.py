@@ -69,7 +69,38 @@ class MLP(nn.Module):
         x = self.linear_out(x)
         return x    
  
+class CoefficientNet(nn.Module):
 
+    def __init__(self,
+                 hidden_layers=3,
+                 hidden_units=25,
+                 activation=nn.Tanh()):
+        super().__init__()
+
+        layers = [
+            nn.Linear(1, hidden_units),
+            activation
+        ]
+
+        for _ in range(hidden_layers-1):
+            layers += [
+                nn.Linear(hidden_units, hidden_units),
+                activation
+            ]
+
+        layers.append(nn.Linear(hidden_units,1))
+
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, X):
+
+        y = X[:,1:2]
+
+        phi = self.net(y)
+
+        k = 1.0 + 2.0*torch.sigmoid(phi)
+
+        return k
 
 def derivative(dy: torch.Tensor, x: torch.Tensor, order: int = 1) -> torch.Tensor:
     """
@@ -104,4 +135,96 @@ def init_weights(m):
         torch.manual_seed(42)  # fix inside
         torch.nn.init.xavier_normal_(m.weight)
         m.bias.data.fill_(0.0)
-      
+
+
+def pde_loss_inf(
+    model_u,
+    model_k,
+    X,
+    F
+):
+
+    # --------------------------------------------------
+    # Predictions
+    # --------------------------------------------------
+
+    u = model_u(X)
+    k = model_k(X)
+    #k = coefficient_torch(X)
+    # --------------------------------------------------
+    # grad(u)
+    # --------------------------------------------------
+
+    grad_u = torch.autograd.grad(
+        u,
+        X,
+        grad_outputs=torch.ones_like(u),
+        create_graph=True,
+    )[0]
+
+    ux = grad_u[:, 0:1]
+    uy = grad_u[:, 1:2]
+
+    # --------------------------------------------------
+    # Fluxes
+    # --------------------------------------------------
+
+    qx = k * ux
+    qy = k * uy
+
+    grad_qx = torch.autograd.grad(
+        qx,
+        X,
+        grad_outputs=torch.ones_like(qx),
+        create_graph=True,
+    )[0]
+
+    grad_qy = torch.autograd.grad(
+        qy,
+        X,
+        grad_outputs=torch.ones_like(qy),
+        create_graph=True,
+    )[0]
+
+    div = (
+        grad_qx[:, 0:1]
+        + grad_qy[:, 1:2]
+    )
+
+    residual = - div - F
+
+    # --------------------------------------------------
+    # PDE loss
+    # --------------------------------------------------
+
+    loss_pde = torch.mean(residual**2)
+ 
+    return loss_pde
+
+
+
+def observation_loss_u(
+    model_u,
+    X,
+    U_true,
+    criterion
+):
+
+    pred = model_u(X)
+
+    mse = criterion(pred, U_true)
+
+    return mse
+
+
+def observation_loss_k(
+    model_k,
+    X,
+    K_true,
+    criterion):
+
+    pred = model_k(X)
+
+    mse = criterion(pred, K_true)
+
+    return mse
