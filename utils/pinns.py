@@ -205,6 +205,107 @@ def pde_loss_inf(
  
     return loss_pde
 
+# def pde_loss_inf(
+#     model_u,
+#     model_k,
+#     X,
+#     F,
+#     lambda_reg=0.0,
+# ):
+#     """
+#     PDE loss with Double-PINN regularization.
+
+#     Returns
+#     -------
+#     loss_total : torch.Tensor
+#         PDE loss + gradient regularization.
+
+#     loss_pde : torch.Tensor
+#         Standard PDE residual loss.
+
+#     loss_reg : torch.Tensor
+#         Gradient regularization term.
+#     """
+
+#     # --------------------------------------------------
+#     # Predictions
+#     # --------------------------------------------------
+
+#     X.requires_grad_(True)
+
+#     u = model_u(X)
+#     k = model_k(X)
+
+#     # --------------------------------------------------
+#     # grad(u)
+#     # --------------------------------------------------
+
+#     grad_u = torch.autograd.grad(
+#         outputs=u,
+#         inputs=X,
+#         grad_outputs=torch.ones_like(u),
+#         create_graph=True,
+#     )[0]
+
+#     ux = grad_u[:, 0:1]
+#     uy = grad_u[:, 1:2]
+
+#     # --------------------------------------------------
+#     # Flux
+#     # --------------------------------------------------
+
+#     qx = k * ux
+#     qy = k * uy
+
+#     grad_qx = torch.autograd.grad(
+#         outputs=qx,
+#         inputs=X,
+#         grad_outputs=torch.ones_like(qx),
+#         create_graph=True,
+#     )[0]
+
+#     grad_qy = torch.autograd.grad(
+#         outputs=qy,
+#         inputs=X,
+#         grad_outputs=torch.ones_like(qy),
+#         create_graph=True,
+#     )[0]
+
+#     div = grad_qx[:, 0:1] + grad_qy[:, 1:2]
+
+#     # --------------------------------------------------
+#     # Pointwise residual
+#     # --------------------------------------------------
+
+#     residual = -div - F
+
+#     # --------------------------------------------------
+#     # Standard PINN loss
+#     # --------------------------------------------------
+
+#     loss_pde = torch.mean(residual**2)
+
+#     # --------------------------------------------------
+#     # Double PINN regularization
+#     # ||∇R||²
+#     # --------------------------------------------------
+
+#     grad_residual = torch.autograd.grad(
+#         outputs=residual,
+#         inputs=X,
+#         grad_outputs=torch.ones_like(residual),
+#         create_graph=True,
+#     )[0]
+
+#     loss_reg = torch.mean(torch.sum(grad_residual**2, dim=1))
+
+#     # --------------------------------------------------
+#     # Total
+#     # --------------------------------------------------
+
+#     loss_total = loss_pde + lambda_reg * loss_reg
+
+#     return loss_total, loss_pde, loss_reg
 
 
 def observation_loss_u(
@@ -274,8 +375,8 @@ def train_dual_network(
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
-    alpha=0.1,
-    update_every=100,
+    alpha=0.2,
+    update_every=500,
     ratio_threshold=10.0,       
 ):
 
@@ -582,3 +683,16 @@ def run_experiment_inf(
     )
 
     return err_u, err_k
+
+
+def gradient_regularization(loss, inputs):
+
+    grad = torch.autograd.grad(
+        outputs=loss,
+        inputs=inputs,
+        grad_outputs=torch.ones_like(loss),
+        create_graph=True,
+        retain_graph=True,
+    )[0]
+
+    return (grad.pow(2).sum(dim=1)).mean()
