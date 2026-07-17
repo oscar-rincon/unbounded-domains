@@ -378,7 +378,7 @@ def train_dual_network(
     alpha=10,
     update_every=100,     
 ):
-
+    ratio = 1
     criterion = nn.MSELoss()
 
     parameters = (
@@ -489,7 +489,7 @@ def train_dual_network(
 
         ratio = V.max() / (V.min() + 1e-12)
 
-        history["ratio"].append(ratio)
+        #history["ratio"].append(ratio)
         if not adaptive_weights:
             return
         # No update
@@ -534,12 +534,12 @@ def train_dual_network(
                 f"ratio  = {ratio:.2f}\n"
                 f"lambda = {lambdas.round(3)}"
             )
-
+        return ratio
     # --------------------------------------------------
     # Helper: save history
     # --------------------------------------------------
 
-    def save_history(total, loss_u, loss_k, loss_pde):
+    def save_history(total, loss_u, loss_k, loss_pde,ratio):
 
         history["total"].append(total.item())
         history["u"].append(loss_u.item())
@@ -548,6 +548,7 @@ def train_dual_network(
         history["lambda_u"].append(lambda_u)
         history["lambda_k"].append(lambda_k)
         history["lambda_pde"].append(lambda_pde)
+        history["ratio"].append(ratio)
 
     # --------------------------------------------------
     # Adam
@@ -569,10 +570,10 @@ def train_dual_network(
         total.backward()
         optimizer_adam.step()
 
-        save_history(total, loss_u, loss_k, loss_pde)
-
         if (epoch + 1) % update_every == 0:
-            update_loss_weights()
+            ratio = update_loss_weights()
+
+        save_history(total, loss_u, loss_k, loss_pde, ratio)
 
         if verbose and epoch % print_every == 0:
 
@@ -603,12 +604,15 @@ def train_dual_network(
 
         total.backward()
 
-        save_history(total, loss_u, loss_k, loss_pde)
+        if (state["iter"]) % update_every == 0:
+            ratio = update_loss_weights()
+        else:
+            ratio = history["ratio"][-1]
+            
+        save_history(total, loss_u, loss_k, loss_pde, ratio)
     
         state["iter"] += 1
 
-        if (state["iter"]) % update_every == 0:
-            update_loss_weights()
 
         if verbose and state["iter"] % print_every == 0:
 
