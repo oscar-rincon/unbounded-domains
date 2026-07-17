@@ -1,0 +1,8 @@
+Infinite-domain inverse problem
+========================================
+
+Date: 2026-07-17 10:27:59
+
+Relative L2 error (u): 2.16842473e-01
+Relative L2 error (k): 2.94693105e-02
+Mean error         : 1.23155892e-01

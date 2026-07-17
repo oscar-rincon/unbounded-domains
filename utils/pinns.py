@@ -375,9 +375,8 @@ def train_dual_network(
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
-    alpha=0.2,
-    update_every=500,
-    ratio_threshold=10.0,       
+    alpha=10,
+    update_every=100,     
 ):
 
     criterion = nn.MSELoss()
@@ -406,9 +405,16 @@ def train_dual_network(
         "u": [],
         "k": [],
         "pde": [],
+
         "lambda_u": [],
         "lambda_k": [],
         "lambda_pde": [],
+
+        # New entries
+        "R_u": [],
+        "R_k": [],
+        "R_pde": [],
+        "ratio": [],
     }
 
     # --------------------------------------------------
@@ -458,12 +464,18 @@ def train_dual_network(
 
         return total, loss_u, loss_k, loss_pde
 
+ 
+
     def update_loss_weights():
 
         nonlocal lambda_u, lambda_k, lambda_pde
-
-        if len(history["u"]) < update_every:
+ 
+        if len(history["u"])-1 < update_every:
             return
+
+        # ----------------------------------------------------
+        # Step 6: Average speed over last N iterations
+        # ----------------------------------------------------
 
         V = np.array([
             np.mean(history["u"][-update_every:]),
@@ -471,28 +483,56 @@ def train_dual_network(
             np.mean(history["pde"][-update_every:])
         ])
 
+        # ----------------------------------------------------
+        # Step 7: Ratio
+        # ----------------------------------------------------
+
         ratio = V.max() / (V.min() + 1e-12)
 
-        if ratio <= ratio_threshold:
+        history["ratio"].append(ratio)
+        if not adaptive_weights:
             return
+        # No update
+        ratio_threshold = 10
+        if ratio <= ratio_threshold:
+
+            history["R_u"].append(0.0)
+            history["R_k"].append(0.0)
+            history["R_pde"].append(0.0)
+
+            return
+
+        # ----------------------------------------------------
+        # Step 9: Compute R
+        # ----------------------------------------------------
 
         R = (V - V.min()) / (V.max() - V.min() + 1e-12)
 
+        history["R_u"].append(R[0])
+        history["R_k"].append(R[1])
+        history["R_pde"].append(R[2])
+
+        # ----------------------------------------------------
+        # Step 10
+        # ----------------------------------------------------
+
         lambdas = 1.0 + alpha * R
 
-        # Fastest task gets weight 1
         fastest = np.argmin(V)
+
         lambdas[fastest] = 1.0
 
-        lambda_u, lambda_k, lambda_pde = lambdas
+        lambda_u = lambdas[0]
+        lambda_k = lambdas[1]
+        lambda_pde = lambdas[2]
 
         if verbose:
 
             print(
-                f"Updated weights -> "
-                f"λu={lambda_u:.2f}, "
-                f"λk={lambda_k:.2f}, "
-                f"λpde={lambda_pde:.2f}"
+                f"V      = {V.round(4)}\n"
+                f"R      = {R.round(3)}\n"
+                f"ratio  = {ratio:.2f}\n"
+                f"lambda = {lambdas.round(3)}"
             )
 
     # --------------------------------------------------
@@ -531,7 +571,7 @@ def train_dual_network(
 
         save_history(total, loss_u, loss_k, loss_pde)
 
-        if adaptive_weights and (epoch + 1) % update_every == 0:
+        if (epoch + 1) % update_every == 0:
             update_loss_weights()
 
         if verbose and epoch % print_every == 0:
@@ -564,11 +604,10 @@ def train_dual_network(
         total.backward()
 
         save_history(total, loss_u, loss_k, loss_pde)
-     
-
+    
         state["iter"] += 1
 
-        if adaptive_weights and (state["iter"]) % update_every == 0:
+        if (state["iter"]) % update_every == 0:
             update_loss_weights()
 
         if verbose and state["iter"] % print_every == 0:
