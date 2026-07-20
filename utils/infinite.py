@@ -99,12 +99,14 @@ def generate_dataset_inf(
         np.column_stack((x_obs, y_obs)),
         dtype=dtype,
         device=device,
+        requires_grad=True,
     )
 
     X_obs_k = torch.tensor(
         np.column_stack((x_obs_k, y_obs_k)),
         dtype=dtype,
         device=device,
+        requires_grad=True,
     )
 
     U_obs = torch.tensor(

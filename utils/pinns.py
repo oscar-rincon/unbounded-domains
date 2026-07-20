@@ -4,6 +4,7 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import pickle
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -13,6 +14,7 @@ from functools import partial
 from matplotlib.gridspec import GridSpec
 #gaussian_kde
 from scipy.stats import gaussian_kde
+import traceback
 
 from infinite import analytical_solution_inf, coefficient_inf, source_term_inf, generate_dataset_inf, evaluate_model_inf
 
@@ -307,6 +309,90 @@ def pde_loss_inf(
 
 #     return loss_total, loss_pde, loss_reg
 
+# def pde_loss_inf(
+#     model_u,
+#     model_k,
+#     X,
+#     F,
+# ):
+
+#     # --------------------------------------------------
+#     # Predictions
+#     # --------------------------------------------------
+
+#     u = model_u(X)
+#     k = model_k(X)
+
+#     # --------------------------------------------------
+#     # grad(u)
+#     # --------------------------------------------------
+
+#     grad_u = torch.autograd.grad(
+#         u,
+#         X,
+#         grad_outputs=torch.ones_like(u),
+#         create_graph=True,
+#     )[0]
+
+#     ux = grad_u[:, 0:1]
+#     uy = grad_u[:, 1:2]
+
+#     # --------------------------------------------------
+#     # Fluxes
+#     # --------------------------------------------------
+
+#     qx = k * ux
+#     qy = k * uy
+
+#     grad_qx = torch.autograd.grad(
+#         qx,
+#         X,
+#         grad_outputs=torch.ones_like(qx),
+#         create_graph=True,
+#     )[0]
+
+#     grad_qy = torch.autograd.grad(
+#         qy,
+#         X,
+#         grad_outputs=torch.ones_like(qy),
+#         create_graph=True,
+#     )[0]
+
+#     div = (
+#         grad_qx[:, 0:1]
+#         + grad_qy[:, 1:2]
+#     )
+
+#     # --------------------------------------------------
+#     # PDE residual
+#     # --------------------------------------------------
+
+#     residual = -div - F
+
+#     # --------------------------------------------------
+#     # PDE loss
+#     # --------------------------------------------------
+
+#     loss_pde = torch.mean(residual**2)
+
+#     # --------------------------------------------------
+#     # Double PINN regularizer
+#     # ||∇R||²
+#     # --------------------------------------------------
+
+#     grad_residual = torch.autograd.grad(
+#         residual,
+#         X,
+#         grad_outputs=torch.ones_like(residual),
+#         create_graph=True,
+#     )[0]
+
+#     reg_pde = torch.mean(
+#         torch.sum(grad_residual**2, dim=1)
+#     )
+
+#     return loss_pde, reg_pde
+
 
 def observation_loss_u(
     model_u,
@@ -322,6 +408,45 @@ def observation_loss_u(
     return mse
 
 
+# def observation_loss_u(
+#     model_u,
+#     X,
+#     U_true,
+#     criterion,
+# ):
+
+#     pred = model_u(X)
+
+#     # -----------------------------------------
+#     # Observation residual
+#     # -----------------------------------------
+
+#     residual = pred - U_true
+
+#     # -----------------------------------------
+#     # MSE loss
+#     # -----------------------------------------
+
+#     loss = criterion(pred, U_true)
+
+#     # -----------------------------------------
+#     # Double PINN regularizer
+#     # ||∇R||²
+#     # -----------------------------------------
+
+#     grad_residual = torch.autograd.grad(
+#         residual,
+#         X,
+#         grad_outputs=torch.ones_like(residual),
+#         create_graph=True,
+#     )[0]
+
+#     reg_u = torch.mean(
+#         torch.sum(grad_residual**2, dim=1)
+#     )
+
+#     return loss, reg_u
+
 def observation_loss_k(
     model_k,
     X,
@@ -334,6 +459,45 @@ def observation_loss_k(
 
     return mse
 
+
+# def observation_loss_k(
+#     model_k,
+#     X,
+#     K_true,
+#     criterion,
+# ):
+
+#     pred = model_k(X)
+
+#     # -----------------------------------------
+#     # Observation residual
+#     # -----------------------------------------
+
+#     residual = pred - K_true
+
+#     # -----------------------------------------
+#     # MSE loss
+#     # -----------------------------------------
+
+#     loss = criterion(pred, K_true)
+
+#     # -----------------------------------------
+#     # Double PINN regularizer
+#     # ||∇R||²
+#     # -----------------------------------------
+
+#     grad_residual = torch.autograd.grad(
+#         residual,
+#         X,
+#         grad_outputs=torch.ones_like(residual),
+#         create_graph=True,
+#     )[0]
+
+#     reg_k = torch.mean(
+#         torch.sum(grad_residual**2, dim=1)
+#     )
+
+#     return loss, reg_k
 
 def build_models(
     device,
@@ -360,23 +524,36 @@ def build_models(
 
     return model_u, model_k
 
+def l2_regularization(parameters):
+    l2 = torch.zeros((), device=parameters[0].device)
+    for p in parameters:
+        l2 += p.pow(2).sum()
+    return l2
+
 def train_dual_network(
     model_u,
     model_k,
-    X_obs,
-    U_obs,
-    X_obs_k,
-    K_obs,
-    X_pde,
-    F_pde,
-    adam_lr=1e-3,
+    X_obs_train,
+    U_obs_train,
+    X_obs_k_train,
+    K_obs_train,
+    X_pde_train,
+    F_pde_train,
+    X_obs_test,
+    U_obs_test,
+    X_obs_k_test,
+    K_obs_test,
+    X_pde_test,
+    F_pde_test,
+    adam_lr=1e-4,
     adam_iters=1000,
     lbfgs_iters=2000,
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
     alpha=10,
-    update_every=100,     
+    update_every=500, 
+    regularization=False,    
 ):
     ratio = 1
     criterion = nn.MSELoss()
@@ -388,17 +565,20 @@ def train_dual_network(
 
     optimizer_adam = optim.Adam(
         parameters,
-        lr=adam_lr,
+        lr=adam_lr 
     )
 
     optimizer_lbfgs = optim.LBFGS(
         parameters,
-        lr=1.0,
+        lr=1,
         max_iter=lbfgs_iters,
         max_eval=lbfgs_iters,
+        tolerance_grad=1e-7,
         history_size=100,
-        line_search_fn="strong_wolfe",
-    )
+        tolerance_change=1.0 * np.finfo(float).eps,
+        line_search_fn="strong_wolfe")
+
+ 
 
     history = {
         "total": [],
@@ -414,7 +594,11 @@ def train_dual_network(
         "R_u": [],
         "R_k": [],
         "R_pde": [],
+        "R_reg_t": [],
         "ratio": [],
+        "total_test": [],
+        "total_no_reg": [],
+        "total_no_reg_test": [],
     }
 
     # --------------------------------------------------
@@ -424,6 +608,7 @@ def train_dual_network(
     lambda_u = 1.0
     lambda_k = 1.0
     lambda_pde = 1.0
+ 
 
     # --------------------------------------------------
     # Helper: compute losses
@@ -433,45 +618,130 @@ def train_dual_network(
 
         loss_u = observation_loss_u(
             model_u,
-            X_obs,
-            U_obs,
+            X_obs_train,
+            U_obs_train,
             criterion,
         )
 
         loss_k = observation_loss_k(
             model_k,
-            X_obs_k,
-            K_obs,
+            X_obs_k_train,
+            K_obs_train,
             criterion,
         )
 
         loss_pde = pde_loss_inf(
             model_u,
             model_k,
-            X_pde,
-            F_pde,
+            X_pde_train,
+            F_pde_train,
         )
 
         loss_u = torch.nan_to_num(loss_u)
         loss_k = torch.nan_to_num(loss_k)
         loss_pde = torch.nan_to_num(loss_pde)
 
+
+        if regularization:
+            reg_t = l2_regularization(parameters)
+            
+            reg_t = l2_regularization(parameters)
+            physics_loss = (
+                lambda_u * loss_u
+                + lambda_k * loss_k
+                + lambda_pde * loss_pde
+            )
+
+            lambda_reg = physics_loss.detach() / (reg_t.detach() + 1e-12)            
+
         total = (
+            lambda_u * loss_u
+            + lambda_k * loss_k
+            + lambda_pde * loss_pde
+            + (1e-4 * reg_t if regularization else 0.0)
+        )
+
+        total_no_reg = (
             lambda_u * loss_u
             + lambda_k * loss_k
             + lambda_pde * loss_pde
         )
 
-        return total, loss_u, loss_k, loss_pde
+        return total, loss_u, loss_k, loss_pde, total_no_reg
+
+    def compute_losses_test():
+
+        loss_u = observation_loss_u(
+            model_u,
+            X_obs_test,
+            U_obs_test,
+            criterion,
+        )
+
+        loss_k = observation_loss_k(
+            model_k,
+            X_obs_k_test,
+            K_obs_test,
+            criterion,
+        )
+
+        loss_pde = pde_loss_inf(
+            model_u,
+            model_k,
+            X_pde_test,
+            F_pde_test,
+        )
+
+        loss_u = torch.nan_to_num(loss_u)
+        loss_k = torch.nan_to_num(loss_k)
+        loss_pde = torch.nan_to_num(loss_pde)
+
+        if regularization:
+            reg_t = l2_regularization(parameters)
+            physics_loss = (
+                lambda_u * loss_u
+                + lambda_k * loss_k
+                + lambda_pde * loss_pde
+            )
+
+            lambda_reg = physics_loss.detach() / (reg_t.detach() + 1e-12)            
+
+        total = (
+            lambda_u * loss_u
+            + lambda_k * loss_k
+            + lambda_pde * loss_pde
+            + (1e-4 * reg_t if regularization else 0.0)
+        )
+
+        total_no_reg = (
+            lambda_u * loss_u
+            + lambda_k * loss_k
+            + lambda_pde * loss_pde
+        )
+
+        return total, loss_u, loss_k, loss_pde, total_no_reg
 
  
+    def ratio_calculation():
+        V = np.array([
+            np.mean(history["u"][-update_every:]),
+            np.mean(history["k"][-update_every:]),
+            np.mean(history["pde"][-update_every:]),
+            #np.mean(history["reg_t"][-update_every:])
+        ])
+
+        # ----------------------------------------------------
+        # Step 7: Ratio
+        # ----------------------------------------------------
+
+        ratio = V.max() / (V.min() + 1e-12)
+        return ratio
 
     def update_loss_weights():
 
         nonlocal lambda_u, lambda_k, lambda_pde
  
-        if len(history["u"])-1 < update_every:
-            return
+ 
 
         # ----------------------------------------------------
         # Step 6: Average speed over last N iterations
@@ -480,7 +750,8 @@ def train_dual_network(
         V = np.array([
             np.mean(history["u"][-update_every:]),
             np.mean(history["k"][-update_every:]),
-            np.mean(history["pde"][-update_every:])
+            np.mean(history["pde"][-update_every:]),
+            #np.mean(history["reg_t"][-update_every:])
         ])
 
         # ----------------------------------------------------
@@ -499,7 +770,7 @@ def train_dual_network(
             history["R_u"].append(0.0)
             history["R_k"].append(0.0)
             history["R_pde"].append(0.0)
-
+            #history["R_reg_t"].append(0.0)
             return
 
         # ----------------------------------------------------
@@ -511,6 +782,7 @@ def train_dual_network(
         history["R_u"].append(R[0])
         history["R_k"].append(R[1])
         history["R_pde"].append(R[2])
+        #history["R_reg_t"].append(R[3])
 
         # ----------------------------------------------------
         # Step 10
@@ -525,30 +797,35 @@ def train_dual_network(
         lambda_u = lambdas[0]
         lambda_k = lambdas[1]
         lambda_pde = lambdas[2]
+        #lambda_reg_t = lambdas[3]
+        #if verbose:
 
-        if verbose:
-
-            print(
-                f"V      = {V.round(4)}\n"
-                f"R      = {R.round(3)}\n"
-                f"ratio  = {ratio:.2f}\n"
-                f"lambda = {lambdas.round(3)}"
-            )
-        return ratio
+            #print(
+            #    f"V      = {V.round(4)}\n"
+            #    f"R      = {R.round(3)}\n"
+            #    f"ratio  = {ratio:.2f}\n"
+            #    f"lambda = {lambdas.round(3)}"
+            #)
+        
     # --------------------------------------------------
     # Helper: save history
     # --------------------------------------------------
 
-    def save_history(total, loss_u, loss_k, loss_pde,ratio):
+    def save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg,total_no_reg_test):
 
         history["total"].append(total.item())
         history["u"].append(loss_u.item())
         history["k"].append(loss_k.item())
         history["pde"].append(loss_pde.item())
+        #history["reg_t"].append(reg_t.item())
         history["lambda_u"].append(lambda_u)
         history["lambda_k"].append(lambda_k)
         history["lambda_pde"].append(lambda_pde)
+        #history["lambda_reg_t"].append(lambda_reg_t)
         history["ratio"].append(ratio)
+        history["total_test"].append(total_test.item())
+        history["total_no_reg"].append(total_no_reg.item())
+        history["total_no_reg_test"].append(total_no_reg_test.item())
 
     # --------------------------------------------------
     # Adam
@@ -565,15 +842,30 @@ def train_dual_network(
 
         optimizer_adam.zero_grad()
 
-        total, loss_u, loss_k, loss_pde = compute_losses()
+        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses()
+        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test()
 
         total.backward()
         optimizer_adam.step()
+        if epoch == 0:
 
-        if (epoch + 1) % update_every == 0:
-            ratio = update_loss_weights()
+            V = np.array([
+                loss_u.item(),
+                loss_k.item(),
+                loss_pde.item(),
+                #reg_t.item()
+            ])
 
-        save_history(total, loss_u, loss_k, loss_pde, ratio)
+            ratio = V.max() / (V.min() + 1e-12)
+             
+        else:
+            ratio = ratio_calculation()
+        
+        #expect in zero 
+        if (epoch) % update_every == 0 and epoch > 0:
+            update_loss_weights()
+
+        save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
 
         if verbose and epoch % print_every == 0:
 
@@ -582,7 +874,8 @@ def train_dual_network(
                 f"Total={total.item():.3e} | "
                 f"ObsU={loss_u.item():.3e} | "
                 f"ObsK={loss_k.item():.3e} | "
-                f"PDE={loss_pde.item():.3e}"
+                f"PDE={loss_pde.item():.3e} | "
+                f"Ratio={ratio:.2f}"
             )
 
     # --------------------------------------------------
@@ -600,16 +893,31 @@ def train_dual_network(
 
         optimizer_lbfgs.zero_grad()
 
-        total, loss_u, loss_k, loss_pde = compute_losses()
+        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses()
+        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test()
 
         total.backward()
 
-        if (state["iter"]) % update_every == 0:
-            ratio = update_loss_weights()
+ 
+
+        if epoch == 0:
+
+            V = np.array([
+                loss_u.item(),
+                loss_k.item(),
+                loss_pde.item(),
+                #reg_t.item()
+            ])
+
+            ratio = V.max() / (V.min() + 1e-12)
+             
         else:
-            ratio = history["ratio"][-1]
-            
-        save_history(total, loss_u, loss_k, loss_pde, ratio)
+            ratio = ratio_calculation()
+
+        if (state["iter"]) % update_every == 0 and state["iter"] > 0:
+            update_loss_weights()
+  
+        save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
     
         state["iter"] += 1
 
@@ -621,7 +929,8 @@ def train_dual_network(
                 f"Total={total.item():.3e} | "
                 f"ObsU={loss_u.item():.3e} | "
                 f"ObsK={loss_k.item():.3e} | "
-                f"PDE={loss_pde.item():.3e}"
+                f"PDE={loss_pde.item():.3e} | "
+                f"Ratio={ratio:.2f}"
             )
 
 
@@ -629,7 +938,33 @@ def train_dual_network(
 
     optimizer_lbfgs.step(closure)
 
+    # --------------------------------------------------
+    # Save history automatically
+    # --------------------------------------------------
+
+    os.makedirs("results", exist_ok=True)
+
+    filename = "history"
+
+    if adaptive_weights:
+        filename += "_adaptive"
+    else:
+        filename += "_fixed"
+
+    if regularization:
+        filename += "_reg"
+    else:
+        filename += "_no_reg"
+
+    filename += ".pkl"
+
+    with open(os.path.join("results", filename), "wb") as f:
+        pickle.dump(history, f)
+
+    #print(f"History saved to results/{filename}")
+
     return history
+
 
 
 
