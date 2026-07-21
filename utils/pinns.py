@@ -282,18 +282,18 @@ def build_models(
         activation_function=activation,
     ).to(device)#.double()
 
-    model_k = MLP(
-        input_size=2,
-        output_size=1,
-        hidden_layers=hidden_layers,
-        hidden_units=hidden_units,
-        activation_function=activation,
-    ).to(device)#.double()
-    # model_k = CoefficientNet(
+    # model_k = MLP(
+    #     input_size=2,
+    #     output_size=1,
     #     hidden_layers=hidden_layers,
     #     hidden_units=hidden_units,
-    #     activation=nn.Sigmoid(),
+    #     activation_function=activation,
     # ).to(device)#.double()
+    model_k = CoefficientNet(
+        hidden_layers=hidden_layers,
+        hidden_units=hidden_units,
+        activation=nn.Sigmoid(),
+    ).to(device)#.double()
 
     model_u.apply(init_weights)
     model_k.apply(init_weights)
@@ -327,8 +327,8 @@ def train_dual_network(
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
-    alpha=1,
-    update_every=200, 
+    alpha=100,
+    update_every=100, 
     regularization=False,    
 ):
     ratio = 1
