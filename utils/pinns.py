@@ -15,7 +15,7 @@ from matplotlib.gridspec import GridSpec
 #gaussian_kde
 from scipy.stats import gaussian_kde
 import traceback
-
+import kan as KAN
 from infinite import analytical_solution_inf, coefficient_inf, source_term_inf, generate_dataset_inf, evaluate_model_inf
 
 
@@ -105,6 +105,35 @@ class CoefficientNet(nn.Module):
         phi = self.net(y)
 
         k = 1.0 + 2.0*torch.sigmoid(phi)
+
+        return k
+
+class CoefficientKAN(nn.Module):
+
+    def __init__(
+        self,
+        hidden_layers=3,
+        hidden_units=16,
+        grid=3,
+        k=3,
+    ):
+        super().__init__()
+
+        layers = [1] + [hidden_units] * hidden_layers + [1]
+
+        self.net = KAN(
+            layers_hidden=layers,
+            grid_size=grid,
+            spline_order=k,
+        )
+
+    def forward(self, X):
+
+        y = X[:, 1:2]
+
+        phi = self.net(y)
+
+        k = 1.0 + 2.0 * torch.sigmoid(phi)
 
         return k
 
@@ -207,191 +236,7 @@ def pde_loss_inf(
  
     return loss_pde
 
-# def pde_loss_inf(
-#     model_u,
-#     model_k,
-#     X,
-#     F,
-#     lambda_reg=0.0,
-# ):
-#     """
-#     PDE loss with Double-PINN regularization.
-
-#     Returns
-#     -------
-#     loss_total : torch.Tensor
-#         PDE loss + gradient regularization.
-
-#     loss_pde : torch.Tensor
-#         Standard PDE residual loss.
-
-#     loss_reg : torch.Tensor
-#         Gradient regularization term.
-#     """
-
-#     # --------------------------------------------------
-#     # Predictions
-#     # --------------------------------------------------
-
-#     X.requires_grad_(True)
-
-#     u = model_u(X)
-#     k = model_k(X)
-
-#     # --------------------------------------------------
-#     # grad(u)
-#     # --------------------------------------------------
-
-#     grad_u = torch.autograd.grad(
-#         outputs=u,
-#         inputs=X,
-#         grad_outputs=torch.ones_like(u),
-#         create_graph=True,
-#     )[0]
-
-#     ux = grad_u[:, 0:1]
-#     uy = grad_u[:, 1:2]
-
-#     # --------------------------------------------------
-#     # Flux
-#     # --------------------------------------------------
-
-#     qx = k * ux
-#     qy = k * uy
-
-#     grad_qx = torch.autograd.grad(
-#         outputs=qx,
-#         inputs=X,
-#         grad_outputs=torch.ones_like(qx),
-#         create_graph=True,
-#     )[0]
-
-#     grad_qy = torch.autograd.grad(
-#         outputs=qy,
-#         inputs=X,
-#         grad_outputs=torch.ones_like(qy),
-#         create_graph=True,
-#     )[0]
-
-#     div = grad_qx[:, 0:1] + grad_qy[:, 1:2]
-
-#     # --------------------------------------------------
-#     # Pointwise residual
-#     # --------------------------------------------------
-
-#     residual = -div - F
-
-#     # --------------------------------------------------
-#     # Standard PINN loss
-#     # --------------------------------------------------
-
-#     loss_pde = torch.mean(residual**2)
-
-#     # --------------------------------------------------
-#     # Double PINN regularization
-#     # ||∇R||²
-#     # --------------------------------------------------
-
-#     grad_residual = torch.autograd.grad(
-#         outputs=residual,
-#         inputs=X,
-#         grad_outputs=torch.ones_like(residual),
-#         create_graph=True,
-#     )[0]
-
-#     loss_reg = torch.mean(torch.sum(grad_residual**2, dim=1))
-
-#     # --------------------------------------------------
-#     # Total
-#     # --------------------------------------------------
-
-#     loss_total = loss_pde + lambda_reg * loss_reg
-
-#     return loss_total, loss_pde, loss_reg
-
-# def pde_loss_inf(
-#     model_u,
-#     model_k,
-#     X,
-#     F,
-# ):
-
-#     # --------------------------------------------------
-#     # Predictions
-#     # --------------------------------------------------
-
-#     u = model_u(X)
-#     k = model_k(X)
-
-#     # --------------------------------------------------
-#     # grad(u)
-#     # --------------------------------------------------
-
-#     grad_u = torch.autograd.grad(
-#         u,
-#         X,
-#         grad_outputs=torch.ones_like(u),
-#         create_graph=True,
-#     )[0]
-
-#     ux = grad_u[:, 0:1]
-#     uy = grad_u[:, 1:2]
-
-#     # --------------------------------------------------
-#     # Fluxes
-#     # --------------------------------------------------
-
-#     qx = k * ux
-#     qy = k * uy
-
-#     grad_qx = torch.autograd.grad(
-#         qx,
-#         X,
-#         grad_outputs=torch.ones_like(qx),
-#         create_graph=True,
-#     )[0]
-
-#     grad_qy = torch.autograd.grad(
-#         qy,
-#         X,
-#         grad_outputs=torch.ones_like(qy),
-#         create_graph=True,
-#     )[0]
-
-#     div = (
-#         grad_qx[:, 0:1]
-#         + grad_qy[:, 1:2]
-#     )
-
-#     # --------------------------------------------------
-#     # PDE residual
-#     # --------------------------------------------------
-
-#     residual = -div - F
-
-#     # --------------------------------------------------
-#     # PDE loss
-#     # --------------------------------------------------
-
-#     loss_pde = torch.mean(residual**2)
-
-#     # --------------------------------------------------
-#     # Double PINN regularizer
-#     # ||∇R||²
-#     # --------------------------------------------------
-
-#     grad_residual = torch.autograd.grad(
-#         residual,
-#         X,
-#         grad_outputs=torch.ones_like(residual),
-#         create_graph=True,
-#     )[0]
-
-#     reg_pde = torch.mean(
-#         torch.sum(grad_residual**2, dim=1)
-#     )
-
-#     return loss_pde, reg_pde
+ 
 
 
 def observation_loss_u(
@@ -407,45 +252,7 @@ def observation_loss_u(
 
     return mse
 
-
-# def observation_loss_u(
-#     model_u,
-#     X,
-#     U_true,
-#     criterion,
-# ):
-
-#     pred = model_u(X)
-
-#     # -----------------------------------------
-#     # Observation residual
-#     # -----------------------------------------
-
-#     residual = pred - U_true
-
-#     # -----------------------------------------
-#     # MSE loss
-#     # -----------------------------------------
-
-#     loss = criterion(pred, U_true)
-
-#     # -----------------------------------------
-#     # Double PINN regularizer
-#     # ||∇R||²
-#     # -----------------------------------------
-
-#     grad_residual = torch.autograd.grad(
-#         residual,
-#         X,
-#         grad_outputs=torch.ones_like(residual),
-#         create_graph=True,
-#     )[0]
-
-#     reg_u = torch.mean(
-#         torch.sum(grad_residual**2, dim=1)
-#     )
-
-#     return loss, reg_u
+ 
 
 def observation_loss_k(
     model_k,
@@ -459,45 +266,7 @@ def observation_loss_k(
 
     return mse
 
-
-# def observation_loss_k(
-#     model_k,
-#     X,
-#     K_true,
-#     criterion,
-# ):
-
-#     pred = model_k(X)
-
-#     # -----------------------------------------
-#     # Observation residual
-#     # -----------------------------------------
-
-#     residual = pred - K_true
-
-#     # -----------------------------------------
-#     # MSE loss
-#     # -----------------------------------------
-
-#     loss = criterion(pred, K_true)
-
-#     # -----------------------------------------
-#     # Double PINN regularizer
-#     # ||∇R||²
-#     # -----------------------------------------
-
-#     grad_residual = torch.autograd.grad(
-#         residual,
-#         X,
-#         grad_outputs=torch.ones_like(residual),
-#         create_graph=True,
-#     )[0]
-
-#     reg_k = torch.mean(
-#         torch.sum(grad_residual**2, dim=1)
-#     )
-
-#     return loss, reg_k
+ 
 
 def build_models(
     device,
@@ -513,11 +282,18 @@ def build_models(
         activation_function=activation,
     ).to(device)#.double()
 
-    model_k = CoefficientNet(
+    model_k = MLP(
+        input_size=2,
+        output_size=1,
         hidden_layers=hidden_layers,
         hidden_units=hidden_units,
-        activation=nn.Sigmoid(),
+        activation_function=activation,
     ).to(device)#.double()
+    # model_k = CoefficientNet(
+    #     hidden_layers=hidden_layers,
+    #     hidden_units=hidden_units,
+    #     activation=nn.Sigmoid(),
+    # ).to(device)#.double()
 
     model_u.apply(init_weights)
     model_k.apply(init_weights)
@@ -551,8 +327,8 @@ def train_dual_network(
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
-    alpha=10,
-    update_every=2000, 
+    alpha=1,
+    update_every=200, 
     regularization=False,    
 ):
     ratio = 1
@@ -928,8 +704,8 @@ def train_dual_network(
         else:
             ratio = ratio_calculation()
 
-        if (state["iter"]) % update_every == 0 and state["iter"] > 0:
-            update_loss_weights(loss_u, loss_k, loss_pde)
+        #if (state["iter"]) % update_every == 0 and state["iter"] > 0:
+        #    update_loss_weights(loss_u, loss_k, loss_pde)
   
         save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
     

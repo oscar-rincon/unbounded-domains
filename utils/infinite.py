@@ -59,42 +59,94 @@ def generate_dataset_inf(
     n_obs_k=100,
     n_pde=10_000,
     n_grid=300,
+    sampling="uniform",   # "uniform", "gaussian", "gaussian_exponential"
+    sigma=2.0,
+    exp_scale=1.0,
     device="cpu",
     dtype=torch.float32,
-    plot=False,           
+    plot=False,
 ):
     xmin, xmax = domain
 
+    # --------------------------------------------------
+    # Sampling functions
+    # --------------------------------------------------
+    def truncated_gaussian(n):
+        x = np.random.normal(0.0, sigma, 5 * n)
+        x = x[(x >= xmin) & (x <= xmax)]
+        while len(x) < n:
+            extra = np.random.normal(0.0, sigma, 2 * n)
+            extra = extra[(extra >= xmin) & (extra <= xmax)]
+            x = np.concatenate((x, extra))
+        return x[:n]
+
+    def truncated_exponential(n):
+        # Symmetric exponential (Laplace)
+        y = np.random.laplace(0.0, exp_scale, 3 * n)
+        y = y[(y >= xmin) & (y <= xmax)]
+        while len(y) < n:
+            extra = np.random.laplace(0.0, exp_scale, 2 * n)
+            extra = extra[(extra >= xmin) & (extra <=xmax)]
+            y = np.concatenate((y, extra))
+        return y[:n]
+
+    def sample_points(n):
+        if sampling == "uniform":
+            x = np.random.uniform(xmin, xmax, n)
+            y = np.random.uniform(xmin, xmax, n)
+
+        elif sampling == "gaussian":
+            x = truncated_gaussian(n)
+            y = truncated_gaussian(n)
+
+        elif sampling == "gaussian_exponential":
+            x = truncated_gaussian(n)
+            y = truncated_exponential(n)
+
+        else:
+            raise ValueError(f"Unknown sampling '{sampling}'")
+
+        return x, y
+
+    # --------------------------------------------------
     # Symbolic variables
+    # --------------------------------------------------
     xs, ys = sp.symbols("x y")
     alpha_s, beta_s = sp.symbols("alpha beta", positive=True)
     eps_s = sp.symbols("epsilon", positive=True)
 
+    # --------------------------------------------------
     # Observation points
-    x_obs = np.random.uniform(xmin, xmax, n_obs_u)
-    y_obs = np.random.uniform(xmin, xmax, n_obs_u)
+    # --------------------------------------------------
+    x_obs, y_obs = sample_points(n_obs_u)
 
-    x_obs_k = np.random.uniform(xmin, xmax, n_obs_k)
-    y_obs_k = np.random.uniform(xmin, xmax, n_obs_k)
+    # Keep k observations uniform
+    #x_obs_k = np.random.uniform(xmin, xmax, n_obs_k)
+    #y_obs_k = np.random.uniform(xmin, xmax, n_obs_k)
+    x_obs_k, y_obs_k = sample_points(n_obs_k)
 
     u_obs = analytical_solution_inf(x_obs, y_obs, alpha, beta)
     k_obs = coefficient_inf(x_obs_k, y_obs_k, epsilon)
 
+    # --------------------------------------------------
     # PDE collocation points
-    x_pde = np.random.uniform(xmin, xmax, n_pde)
-    y_pde = np.random.uniform(xmin, xmax, n_pde)
+    # --------------------------------------------------
+    x_pde, y_pde = sample_points(n_pde)
 
     f_pde = source_term_inf(xs, ys, alpha_s, beta_s, eps_s)
     f_values = f_pde(x_pde, y_pde, alpha, beta, epsilon)
 
+    # --------------------------------------------------
     # Visualization grid
+    # --------------------------------------------------
     x = np.linspace(xmin, xmax, n_grid)
     y = np.linspace(xmin, xmax, n_grid)
-
     X, Y = np.meshgrid(x, y)
     U = analytical_solution_inf(X, Y, alpha, beta)
 
+    # --------------------------------------------------
     # Torch tensors
+    # --------------------------------------------------
     X_obs = torch.tensor(
         np.column_stack((x_obs, y_obs)),
         dtype=dtype,
@@ -134,16 +186,15 @@ def generate_dataset_inf(
         device=device,
     )
 
+    # --------------------------------------------------
+    # Plot
+    # --------------------------------------------------
     if plot:
-        fig, ax = plt.subplots(
-            1, 2,
-            figsize=(6.5, 3.2),
-        )
+        fig, ax = plt.subplots(1, 2, figsize=(6.5, 3.2))
 
-        # Left: u(x,y)
         im = ax[0].imshow(
             U,
-            extent=[-5, 5, -5, 5],
+            extent=[xmin, xmax, xmin, xmax],
             origin="lower",
             cmap="RdBu_r",
             vmin=-1,
@@ -163,45 +214,30 @@ def generate_dataset_inf(
             linewidths=0.25,
         )
 
-        ax[0].set_title(r"$u(x,y)$ observations")
-        ax[0].set_xlabel(r"$x$")
-        ax[0].set_ylabel(r"$y$")
+        ax[0].set_title(f"$u(x,y)$ ({sampling})")
+        ax[0].set_xlabel("$x$")
+        ax[0].set_ylabel("$y$")
         ax[0].set_aspect("equal")
 
-        cbar = fig.colorbar(
-            im,
-            ax=ax[0],
-            fraction=0.046,
-            pad=0.04,
-        )
-        cbar.set_label(r"$u(x,y)$")
+        fig.colorbar(im, ax=ax[0], fraction=0.046, pad=0.04)
 
-        # Right: k(y)
         ax[1].scatter(
+            x_obs_k,
             y_obs_k,
-            k_obs,
-            color="black",
+            c=k_obs,
+            cmap="viridis",
             s=20,
+            edgecolors="k",
+            linewidths=0.25,
         )
 
-        # Exact coefficient (optional)
-        y_plot = np.linspace(-5, 5, 400)
-        k_plot = 1 + 2/(1 + np.exp(-y_plot/1.0))
-
-        ax[1].plot(
-            y_plot,
-            k_plot,
-            color="tab:blue",
-            lw=2,
-        )
-
-        ax[1].set_xlabel(r"$y$")
-        ax[1].set_ylabel(r"$k(y)$")
-        ax[1].set_title(r"$k(y)$ observations")
+        ax[1].set_xlabel("$x$")
+        ax[1].set_ylabel("$y$")
+        ax[1].set_title(r"$k$ observation locations")
+        ax[1].set_aspect("equal")
 
         plt.tight_layout()
         plt.show()
-
 
     return (
         X_obs,
@@ -214,6 +250,8 @@ def generate_dataset_inf(
         Y,
         U,
     )
+
+ 
 
 def evaluate_model_inf(
     model_u,
