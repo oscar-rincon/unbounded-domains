@@ -511,13 +511,13 @@ def build_models(
         hidden_layers=hidden_layers,
         hidden_units=hidden_units,
         activation_function=activation,
-    ).to(device).double()
+    ).to(device)#.double()
 
     model_k = CoefficientNet(
         hidden_layers=hidden_layers,
         hidden_units=hidden_units,
         activation=nn.Sigmoid(),
-    ).to(device).double()
+    ).to(device)#.double()
 
     model_u.apply(init_weights)
     model_k.apply(init_weights)
@@ -552,7 +552,7 @@ def train_dual_network(
     print_every=100, 
     adaptive_weights=True,
     alpha=10,
-    update_every=500, 
+    update_every=2000, 
     regularization=False,    
 ):
     ratio = 1
@@ -563,9 +563,10 @@ def train_dual_network(
         + list(model_k.parameters())
     )
 
-    optimizer_adam = optim.Adam(
+    optimizer_adam = optim.AdamW(
         parameters,
-        lr=adam_lr 
+        lr=adam_lr ,
+        weight_decay=1 if regularization else 0.0
     )
 
     optimizer_lbfgs = optim.LBFGS(
@@ -614,7 +615,7 @@ def train_dual_network(
     # Helper: compute losses
     # --------------------------------------------------
 
-    def compute_losses():
+    def compute_losses(lambda_reg=1.0):
 
         loss_u = observation_loss_u(
             model_u,
@@ -645,20 +646,15 @@ def train_dual_network(
         if regularization:
             reg_t = l2_regularization(parameters)
             
-            reg_t = l2_regularization(parameters)
-            physics_loss = (
-                lambda_u * loss_u
-                + lambda_k * loss_k
-                + lambda_pde * loss_pde
-            )
+  
 
-            lambda_reg = physics_loss.detach() / (reg_t.detach() + 1e-12)            
+                        
 
         total = (
             lambda_u * loss_u
             + lambda_k * loss_k
             + lambda_pde * loss_pde
-            + (1e-4 * reg_t if regularization else 0.0)
+            + (lambda_reg * reg_t if regularization else 0.0)
         )
 
         total_no_reg = (
@@ -669,7 +665,7 @@ def train_dual_network(
 
         return total, loss_u, loss_k, loss_pde, total_no_reg
 
-    def compute_losses_test():
+    def compute_losses_test(lambda_reg=1.0):
 
         loss_u = observation_loss_u(
             model_u,
@@ -698,19 +694,12 @@ def train_dual_network(
 
         if regularization:
             reg_t = l2_regularization(parameters)
-            physics_loss = (
-                lambda_u * loss_u
-                + lambda_k * loss_k
-                + lambda_pde * loss_pde
-            )
-
-            lambda_reg = physics_loss.detach() / (reg_t.detach() + 1e-12)            
-
+ 
         total = (
             lambda_u * loss_u
             + lambda_k * loss_k
             + lambda_pde * loss_pde
-            + (1e-4 * reg_t if regularization else 0.0)
+            + (lambda_reg * reg_t if regularization else 0.0)
         )
 
         total_no_reg = (
@@ -737,22 +726,29 @@ def train_dual_network(
         ratio = V.max() / (V.min() + 1e-12)
         return ratio
 
-    def update_loss_weights():
+    def update_loss_weights(loss_u, loss_k, loss_pde):
 
         nonlocal lambda_u, lambda_k, lambda_pde
- 
- 
 
         # ----------------------------------------------------
-        # Step 6: Average speed over last N iterations
+        # Step 6: Current losses or moving average
         # ----------------------------------------------------
 
-        V = np.array([
-            np.mean(history["u"][-update_every:]),
-            np.mean(history["k"][-update_every:]),
-            np.mean(history["pde"][-update_every:]),
-            #np.mean(history["reg_t"][-update_every:])
-        ])
+        if len(history["u"]) == 0:
+
+            V = np.array([
+                loss_u.item(),
+                loss_k.item(),
+                loss_pde.item(),
+            ])
+
+        else:
+
+            V = np.array([
+                np.mean(history["u"][-update_every:]),
+                np.mean(history["k"][-update_every:]),
+                np.mean(history["pde"][-update_every:]),
+            ])
 
         # ----------------------------------------------------
         # Step 7: Ratio
@@ -760,21 +756,20 @@ def train_dual_network(
 
         ratio = V.max() / (V.min() + 1e-12)
 
-        #history["ratio"].append(ratio)
         if not adaptive_weights:
             return
-        # No update
+
         ratio_threshold = 10
+
         if ratio <= ratio_threshold:
 
             history["R_u"].append(0.0)
             history["R_k"].append(0.0)
             history["R_pde"].append(0.0)
-            #history["R_reg_t"].append(0.0)
             return
 
         # ----------------------------------------------------
-        # Step 9: Compute R
+        # Step 8: Compute R
         # ----------------------------------------------------
 
         R = (V - V.min()) / (V.max() - V.min() + 1e-12)
@@ -782,21 +777,27 @@ def train_dual_network(
         history["R_u"].append(R[0])
         history["R_k"].append(R[1])
         history["R_pde"].append(R[2])
-        #history["R_reg_t"].append(R[3])
 
         # ----------------------------------------------------
-        # Step 10
+        # Step 9: Update lambdas
         # ----------------------------------------------------
 
         lambdas = 1.0 + alpha * R
 
         fastest = np.argmin(V)
-
         lambdas[fastest] = 1.0
 
         lambda_u = lambdas[0]
         lambda_k = lambdas[1]
         lambda_pde = lambdas[2]
+
+        if verbose:
+            print(
+                f"V      = {V.round(3)}\n"
+                f"R      = {R.round(3)}\n"
+                f"ratio  = {ratio:.2f}\n"
+                f"lambda = {lambdas.round(3)}"
+            )
         #lambda_reg_t = lambdas[3]
         #if verbose:
 
@@ -842,11 +843,12 @@ def train_dual_network(
 
         optimizer_adam.zero_grad()
 
-        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses()
-        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test()
 
-        total.backward()
-        optimizer_adam.step()
+        lambda_reg=0
+
+        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
+        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+
         if epoch == 0:
 
             V = np.array([
@@ -857,13 +859,22 @@ def train_dual_network(
             ])
 
             ratio = V.max() / (V.min() + 1e-12)
-             
+            update_loss_weights(loss_u, loss_k, loss_pde) 
+            total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
+            total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+
         else:
             ratio = ratio_calculation()
         
+
+        total.backward()
+        optimizer_adam.step()
+
         #expect in zero 
         if (epoch) % update_every == 0 and epoch > 0:
-            update_loss_weights()
+            update_loss_weights(loss_u, loss_k, loss_pde)
+
+
 
         save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
 
@@ -893,8 +904,11 @@ def train_dual_network(
 
         optimizer_lbfgs.zero_grad()
 
-        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses()
-        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test()
+
+        lambda_reg=1e-4
+
+        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
+        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
 
         total.backward()
 
@@ -915,7 +929,7 @@ def train_dual_network(
             ratio = ratio_calculation()
 
         if (state["iter"]) % update_every == 0 and state["iter"] > 0:
-            update_loss_weights()
+            update_loss_weights(loss_u, loss_k, loss_pde)
   
         save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
     

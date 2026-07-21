@@ -60,7 +60,7 @@ def generate_dataset_inf(
     n_pde=10_000,
     n_grid=300,
     device="cpu",
-    dtype=torch.float64,
+    dtype=torch.float32,
     plot=False,           
 ):
     xmin, xmax = domain
@@ -247,7 +247,7 @@ def evaluate_model_inf(
 
     X_test = torch.tensor(
         np.column_stack((X.ravel(), Y.ravel())),
-        dtype=torch.float64,
+        dtype=torch.float32,
         device=device,
     )
 
