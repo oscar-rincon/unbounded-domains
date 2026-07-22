@@ -15,7 +15,7 @@ from matplotlib.gridspec import GridSpec
 #gaussian_kde
 from scipy.stats import gaussian_kde
 import traceback
-import kan as KAN
+from kan import KAN
 from infinite import analytical_solution_inf, coefficient_inf, source_term_inf, generate_dataset_inf, evaluate_model_inf
 
 
@@ -74,7 +74,37 @@ class MLP(nn.Module):
             x = self.act(layer(x))
         x = self.linear_out(x)
         return x    
- 
+
+def create_kan(
+    input_size,
+    output_size,
+    hidden_layers=3,
+    hidden_units=25,
+    grid_size=3,
+    spline_order=3,
+):
+    """
+    Creates a KAN model.
+
+    Args:
+        input_size (int): Number of input features.
+        output_size (int): Number of output features.
+        hidden_layers (int): Number of hidden layers.
+        hidden_units (int): Number of neurons (KAN units) per hidden layer.
+        grid_size (int): Number of spline intervals.
+        spline_order (int): Order of the B-splines.
+
+    Returns:
+        KAN: Initialized KAN model.
+    """
+    return KAN(
+        width=[input_size]
+              + [hidden_units] * hidden_layers
+              + [output_size],
+        grid=grid_size,
+        k=spline_order,
+    )
+
 class CoefficientNet(nn.Module):
 
     def __init__(self,
@@ -266,7 +296,27 @@ def observation_loss_k(
 
     return mse
 
- 
+
+def build_models_KAN(
+    device,
+    hidden_layers=3,
+    hidden_units=25,
+    grid_size=3,
+    spline_order=3,
+):
+    model_u = KAN(
+        width=[2] + [hidden_units] * hidden_layers + [1],
+        grid=grid_size,
+        k=spline_order,
+    ).to(device)
+
+    model_k = KAN(
+        width=[2] + [hidden_units] * hidden_layers + [1],
+        grid=grid_size,
+        k=spline_order,
+    ).to(device)
+
+    return model_u, model_k 
 
 def build_models(
     device,
