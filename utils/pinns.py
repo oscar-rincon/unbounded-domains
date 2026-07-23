@@ -15,7 +15,7 @@ from matplotlib.gridspec import GridSpec
 #gaussian_kde
 from scipy.stats import gaussian_kde
 import traceback
-from kan import KAN
+from efficient_kan import KAN
 from infinite import analytical_solution_inf, coefficient_inf, source_term_inf, generate_dataset_inf, evaluate_model_inf
 
 
@@ -98,11 +98,11 @@ def create_kan(
         KAN: Initialized KAN model.
     """
     return KAN(
-        width=[input_size]
+        layers_hidden=[input_size]
               + [hidden_units] * hidden_layers
               + [output_size],
-        grid=grid_size,
-        k=spline_order,
+        grid_size=grid_size,
+        spline_order=spline_order,
     )
 
 class CoefficientNet(nn.Module):
@@ -305,15 +305,15 @@ def build_models_KAN(
     spline_order=3,
 ):
     model_u = KAN(
-        width=[2] + [hidden_units] * hidden_layers + [1],
-        grid=grid_size,
-        k=spline_order,
+        layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
+        grid_size=grid_size,
+        spline_order=spline_order,
     ).to(device)
 
     model_k = KAN(
-        width=[2] + [hidden_units] * hidden_layers + [1],
-        grid=grid_size,
-        k=spline_order,
+        layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
+        grid_size=grid_size,
+        spline_order=spline_order,
     ).to(device)
 
     return model_u, model_k 
@@ -473,9 +473,6 @@ def train_dual_network(
             reg_t = l2_regularization(parameters)
             
   
-
-                        
-
         total = (
             lambda_u * loss_u
             + lambda_k * loss_k
@@ -669,11 +666,12 @@ def train_dual_network(
 
         optimizer_adam.zero_grad()
 
-
+        total_no_reg_test = torch.tensor(0.0)  # Initialize total_no_reg_test to avoid undefined variable error
+        total_test = torch.tensor(0.0)  # Initialize total_test to avoid undefined
         lambda_reg=0
 
         total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+        #total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
 
         if epoch == 0:
 
@@ -687,7 +685,7 @@ def train_dual_network(
             ratio = V.max() / (V.min() + 1e-12)
             update_loss_weights(loss_u, loss_k, loss_pde) 
             total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-            total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+            #total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
 
         else:
             ratio = ratio_calculation()
@@ -734,7 +732,7 @@ def train_dual_network(
         lambda_reg=1e-4
 
         total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+        #total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
 
         total.backward()
 
