@@ -308,12 +308,16 @@ def build_models_KAN(
         layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
         grid_size=grid_size,
         spline_order=spline_order,
+        grid_range=[-5,5],
+        base_activation=torch.nn.Tanh
     ).to(device)
 
     model_k = KAN(
         layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
         grid_size=grid_size,
         spline_order=spline_order,
+        grid_range=[-5,5],
+        base_activation=torch.nn.Tanh
     ).to(device)
 
     return model_u, model_k 
@@ -371,7 +375,7 @@ def train_dual_network(
     K_obs_test,
     X_pde_test,
     F_pde_test,
-    adam_lr=1e-4,
+    adam_lr=1e-3,
     adam_iters=1000,
     lbfgs_iters=2000,
     verbose=False,
@@ -400,7 +404,6 @@ def train_dual_network(
         lr=1,
         max_iter=lbfgs_iters,
         max_eval=lbfgs_iters,
-        tolerance_grad=1e-7,
         history_size=100,
         tolerance_change=1.0 * np.finfo(float).eps,
         line_search_fn="strong_wolfe")
