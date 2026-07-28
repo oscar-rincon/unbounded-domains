@@ -60,7 +60,7 @@ def generate_dataset_inf(
     n_pde=10_000,
     n_grid=300,
     sampling="uniform",   # "uniform", "gaussian", "gaussian_exponential"
-    sigma=2.0,
+    sigma=3.0,
     exp_scale=1.0,
     device="cpu",
     dtype=torch.float32,
@@ -143,7 +143,7 @@ def generate_dataset_inf(
     y = np.linspace(xmin, xmax, n_grid)
     X, Y = np.meshgrid(x, y)
     U = analytical_solution_inf(X, Y, alpha, beta)
-
+    K = coefficient_inf(X, Y, epsilon)
     # --------------------------------------------------
     # Torch tensors
     # --------------------------------------------------
@@ -221,6 +221,16 @@ def generate_dataset_inf(
 
         fig.colorbar(im, ax=ax[0], fraction=0.046, pad=0.04)
 
+        im = ax[1].imshow(
+            K,
+            extent=[xmin, xmax, xmin, xmax],
+            origin="lower",
+            #cmap="RdBu_r",
+            vmin=1,
+            vmax=3,
+            alpha=0.35,
+        )
+
         ax[1].scatter(
             x_obs_k,
             y_obs_k,
@@ -236,6 +246,7 @@ def generate_dataset_inf(
         ax[1].set_title(r"$k$ observation locations")
         ax[1].set_aspect("equal")
 
+        fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
         plt.tight_layout()
         plt.show()
 

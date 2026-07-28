@@ -301,7 +301,7 @@ def build_models_KAN(
     device,
     hidden_layers=3,
     hidden_units=25,
-    grid_size=3,
+    grid_size=5,
     spline_order=3,
 ):
     model_u = KAN(
@@ -309,7 +309,6 @@ def build_models_KAN(
         grid_size=grid_size,
         spline_order=spline_order,
         grid_range=[-5,5],
-        base_activation=torch.nn.Tanh
     ).to(device)
 
     model_k = KAN(
@@ -317,7 +316,6 @@ def build_models_KAN(
         grid_size=grid_size,
         spline_order=spline_order,
         grid_range=[-5,5],
-        base_activation=torch.nn.Tanh
     ).to(device)
 
     return model_u, model_k 
@@ -382,7 +380,7 @@ def train_dual_network(
     print_every=100, 
     adaptive_weights=True,
     alpha=10,
-    update_every=100, 
+    update_every=500, 
     regularization=False,    
 ):
     ratio = 1
