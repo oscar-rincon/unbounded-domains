@@ -379,7 +379,7 @@ def train_dual_network(
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
-    alpha=10,
+    alpha=1,
     update_every=500, 
     regularization=False,    
 ):
