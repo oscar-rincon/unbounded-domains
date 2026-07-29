@@ -380,7 +380,7 @@ def train_dual_network(
     print_every=100, 
     adaptive_weights=True,
     alpha=10,
-    update_every=500, 
+    update_every=1000, 
     regularization=False,    
 ):
     ratio = 1
@@ -482,9 +482,9 @@ def train_dual_network(
         )
 
         total_no_reg = (
-            lambda_u * loss_u
-            + lambda_k * loss_k
-            + lambda_pde * loss_pde
+             loss_u
+            + loss_k
+            + loss_pde
         )
 
         return total, loss_u, loss_k, loss_pde, total_no_reg
@@ -527,9 +527,9 @@ def train_dual_network(
         )
 
         total_no_reg = (
-            lambda_u * loss_u
-            + lambda_k * loss_k
-            + lambda_pde * loss_pde
+            loss_u
+            + loss_k
+            + loss_pde
         )
 
         return total, loss_u, loss_k, loss_pde, total_no_reg
@@ -714,6 +714,68 @@ def train_dual_network(
                 f"Ratio={ratio:.2f}"
             )
 
+    # # --------------------------------------------------
+    # # L-BFGS
+    # # --------------------------------------------------
+
+    # if verbose:
+    #     print("\n====================================")
+    #     print("Training with L-BFGS")
+    #     print("====================================")
+
+    # state = {"iter": 0}
+
+    # def closure():
+
+    #     optimizer_lbfgs.zero_grad()
+
+    #     lambda_reg=1e-3
+
+    #     total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
+    #     total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+
+    #     total.backward()
+
+ 
+
+    #     if epoch == 0:
+
+    #         V = np.array([
+    #             loss_u.item(),
+    #             loss_k.item(),
+    #             loss_pde.item(),
+    #             #reg_t.item()
+    #         ])
+
+    #         ratio = V.max() / (V.min() + 1e-12)
+             
+    #     else:
+    #         ratio = ratio_calculation()
+
+    #     #if (state["iter"]) % update_every == 0 and state["iter"] > 0:
+    #     #    update_loss_weights(loss_u, loss_k, loss_pde)
+  
+    #     save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
+    
+    #     state["iter"] += 1
+
+
+    #     if verbose and state["iter"] % print_every == 0:
+
+    #         print(
+    #             f"L-BFGS {state['iter']:5d} | "
+    #             f"Total={total.item():.3e} | "
+    #             f"ObsU={loss_u.item():.3e} | "
+    #             f"ObsK={loss_k.item():.3e} | "
+    #             f"PDE={loss_pde.item():.3e} | "
+    #             f"Ratio={ratio:.2f}"
+    #         )
+
+
+    #     return total
+
+    # optimizer_lbfgs.step(closure)
+
     # --------------------------------------------------
     # L-BFGS
     # --------------------------------------------------
@@ -723,84 +785,167 @@ def train_dual_network(
         print("Training with L-BFGS")
         print("====================================")
 
-    state = {"iter": 0}
+    state = {
+        "iter": 0,
+        "loss_u": None,
+        "loss_k": None,
+        "loss_pde": None,
+    }
 
-    def closure():
+    iters_done = 0
+    while iters_done < lbfgs_iters:
 
-        optimizer_lbfgs.zero_grad()
+        # --------------------------------------------------
+        # Restart L-BFGS every update_every iterations
+        # --------------------------------------------------
 
+        #current_block = min(update_every, lbfgs_iters - state["iter"])
+        current_block = min(update_every, lbfgs_iters - iters_done)
 
-        lambda_reg=1e-0
+        optimizer_lbfgs = torch.optim.LBFGS(
+            list(model_u.parameters()) + list(model_k.parameters()),
+            lr=1.0,
+            max_iter=current_block,
+            history_size=100,
+            tolerance_grad=1e-9,
+            tolerance_change=1e-12,
+            line_search_fn="strong_wolfe",
+        )
 
-        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+        def closure():
 
-        total.backward()
+            optimizer_lbfgs.zero_grad()
 
- 
+            lambda_reg = 1e-3
 
-        if epoch == 0:
+            total, loss_u, loss_k, loss_pde, total_no_reg = \
+                compute_losses(lambda_reg)
 
-            V = np.array([
-                loss_u.item(),
-                loss_k.item(),
-                loss_pde.item(),
-                #reg_t.item()
-            ])
+            total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = \
+                compute_losses_test(lambda_reg)
 
-            ratio = V.max() / (V.min() + 1e-12)
-             
-        else:
-            ratio = ratio_calculation()
+            total.backward()
 
-        #if (state["iter"]) % update_every == 0 and state["iter"] > 0:
-        #    update_loss_weights(loss_u, loss_k, loss_pde)
-  
-        save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
-    
-        state["iter"] += 1
+            # ------------------------------------------
+            # Ratio
+            # ------------------------------------------
 
+            if iters_done == 0:
 
-        if verbose and state["iter"] % print_every == 0:
+                V = np.array([
+                    loss_u.item(),
+                    loss_k.item(),
+                    loss_pde.item(),
+                ])
 
-            print(
-                f"L-BFGS {state['iter']:5d} | "
-                f"Total={total.item():.3e} | "
-                f"ObsU={loss_u.item():.3e} | "
-                f"ObsK={loss_k.item():.3e} | "
-                f"PDE={loss_pde.item():.3e} | "
-                f"Ratio={ratio:.2f}"
+                ratio = V.max() / (V.min() + 1e-12)
+
+            else:
+
+                ratio = ratio_calculation()
+
+            # ------------------------------------------
+            # Store latest losses
+            # ------------------------------------------
+
+            state["loss_u"] = loss_u.detach()
+            state["loss_k"] = loss_k.detach()
+            state["loss_pde"] = loss_pde.detach()
+
+            # ------------------------------------------
+            # Save history
+            # ------------------------------------------
+
+            save_history(
+                total,
+                loss_u,
+                loss_k,
+                loss_pde,
+                ratio,
+                total_test,
+                total_no_reg,
+                total_no_reg_test,
             )
 
+            state["iter"] += 1
 
-        return total
+            if verbose and state["iter"] % print_every == 0:
 
-    optimizer_lbfgs.step(closure)
+                print(
+                    f"L-BFGS {state['iter']:5d} | "
+                    f"Total={total.item():.3e} | "
+                    f"ObsU={loss_u.item():.3e} | "
+                    f"ObsK={loss_k.item():.3e} | "
+                    f"PDE={loss_pde.item():.3e} | "
+                    f"Ratio={ratio:.2f}"
+                )
 
-    # --------------------------------------------------
-    # Save history automatically
-    # --------------------------------------------------
+            return total
 
-    os.makedirs("results", exist_ok=True)
+        # --------------------------------------------------
+        # Run one L-BFGS block
+        # --------------------------------------------------
 
-    filename = "history"
+        optimizer_lbfgs.step(closure)
+        iters_done += current_block
+        # --------------------------------------------------
+        # Update adaptive weights
+        # --------------------------------------------------
 
-    if adaptive_weights:
-        filename += "_adaptive"
-    else:
-        filename += "_fixed"
+        if adaptive_weights and iters_done < lbfgs_iters:
 
-    if regularization:
-        filename += "_reg"
-    else:
-        filename += "_no_reg"
+            update_loss_weights(
+                state["loss_u"],
+                state["loss_k"],
+                state["loss_pde"],
+            )
 
-    filename += ".pkl"
+            # if verbose:
 
-    with open(os.path.join("results", filename), "wb") as f:
-        pickle.dump(history, f)
+            #     print(
+            #         "\n------------------------------------"
+            #     )
 
-    #print(f"History saved to results/{filename}")
+            #     print(
+            #         f"Adaptive weights updated "
+            #         f"(iteration {iters_done + current_block})"
+            #     )
+
+            #     print(
+            #         f"λu   = {lambda_u:.3f}\n"
+            #         f"λk   = {lambda_k:.3f}\n"
+            #         f"λpde = {lambda_pde:.3f}"
+            #     )
+
+            #     print(
+            #         "Restarting L-BFGS...\n"
+            #     )
+
+
+        # --------------------------------------------------
+        # Save history automatically
+        # --------------------------------------------------
+
+        os.makedirs("results", exist_ok=True)
+
+        filename = "history"
+
+        if adaptive_weights:
+            filename += "_adaptive"
+        else:
+            filename += "_fixed"
+
+        if regularization:
+            filename += "_reg"
+        else:
+            filename += "_no_reg"
+
+        filename += ".pkl"
+
+        with open(os.path.join("results", filename), "wb") as f:
+            pickle.dump(history, f)
+
+        #print(f"History saved to results/{filename}")
 
     return history
 
