@@ -379,7 +379,7 @@ def train_dual_network(
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
-    alpha=1,
+    alpha=10,
     update_every=500, 
     regularization=False,    
 ):
@@ -672,7 +672,7 @@ def train_dual_network(
         lambda_reg=0
 
         total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-        #total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
 
         if epoch == 0:
 
@@ -686,7 +686,7 @@ def train_dual_network(
             ratio = V.max() / (V.min() + 1e-12)
             update_loss_weights(loss_u, loss_k, loss_pde) 
             total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-            #total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+            total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
 
         else:
             ratio = ratio_calculation()
@@ -730,10 +730,10 @@ def train_dual_network(
         optimizer_lbfgs.zero_grad()
 
 
-        lambda_reg=1e-4
+        lambda_reg=1e-0
 
         total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-        #total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
 
         total.backward()
 
