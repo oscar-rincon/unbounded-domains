@@ -60,40 +60,43 @@ def generate_dataset_inf(
     n_pde=10_000,
     n_grid=300,
     sampling="uniform",   # "uniform", "gaussian", "gaussian_exponential"
-    sigma=2.5,
+    sigma=2.0,
     exp_scale=1.0,
     device="cpu",
     dtype=torch.float32,
     plot=False,
+    seed=1
 ):
+    rng = np.random.default_rng(seed)
+
     xmin, xmax = domain
 
     # --------------------------------------------------
     # Sampling functions
     # --------------------------------------------------
     def truncated_gaussian(n):
-        x = np.random.normal(0.0, sigma, 5 * n)
+        x = rng.normal(0.0, sigma, 5 * n)
         x = x[(x >= xmin) & (x <= xmax)]
         while len(x) < n:
-            extra = np.random.normal(0.0, sigma, 2 * n)
+            extra = rng.normal(0.0, sigma, 2 * n)
             extra = extra[(extra >= xmin) & (extra <= xmax)]
             x = np.concatenate((x, extra))
         return x[:n]
 
     def truncated_exponential(n):
         # Symmetric exponential (Laplace)
-        y = np.random.laplace(0.0, exp_scale, 3 * n)
+        y = rng.laplace(0.0, exp_scale, 3 * n)
         y = y[(y >= xmin) & (y <= xmax)]
         while len(y) < n:
-            extra = np.random.laplace(0.0, exp_scale, 2 * n)
+            extra = rng.laplace(0.0, exp_scale, 2 * n)
             extra = extra[(extra >= xmin) & (extra <=xmax)]
             y = np.concatenate((y, extra))
         return y[:n]
 
     def sample_points(n):
         if sampling == "uniform":
-            x = np.random.uniform(xmin, xmax, n)
-            y = np.random.uniform(xmin, xmax, n)
+            x = rng.uniform(xmin, xmax, n)
+            y = rng.uniform(xmin, xmax, n)
 
         elif sampling == "gaussian":
             x = truncated_gaussian(n)
