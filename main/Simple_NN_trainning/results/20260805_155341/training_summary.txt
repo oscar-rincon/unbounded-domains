@@ -1,0 +1,50 @@
+======================================================================
+NEURAL NETWORK TRAINING SUMMARY
+======================================================================
+
+GENERAL INFORMATION
+----------------------------------------------------------------------
+Date                : 2026-08-05 15:56:30.392808
+Results directory   : results/20260805_155341
+Device              : cpu
+
+TRAINING CONFIGURATION
+----------------------------------------------------------------------
+Seed                : 42
+Epochs              : 70001
+Learning rate       : 0.001
+Optimizer           : Adam
+Loss function       : MSELoss
+
+DATASET
+----------------------------------------------------------------------
+Samples             : 500
+x range             : [-6.283, 6.283]
+Target function     : sin(15x)
+
+MODEL
+----------------------------------------------------------------------
+Sequential(
+  (0): Linear(in_features=1, out_features=125, bias=True)
+  (1): Tanh()
+  (2): Linear(in_features=125, out_features=125, bias=True)
+  (3): Tanh()
+  (4): Linear(in_features=125, out_features=125, bias=True)
+  (5): Tanh()
+  (6): Linear(in_features=125, out_features=125, bias=True)
+  (7): Tanh()
+  (8): Linear(in_features=125, out_features=125, bias=True)
+  (9): Tanh()
+  (10): Linear(in_features=125, out_features=125, bias=True)
+  (11): Tanh()
+  (12): Linear(in_features=125, out_features=1, bias=True)
+)
+
+Total parameters    : 79126
+
+RESULTS
+----------------------------------------------------------------------
+Training time (s)   : 168.525747
+Final loss          : 9.786340524442e-05
+Minimum loss        : 4.695220923168e-06
+Maximum loss        : 5.700951814651e-01
