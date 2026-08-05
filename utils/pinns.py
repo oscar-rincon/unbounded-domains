@@ -379,7 +379,7 @@ def train_dual_network(
     print_every=100, 
     adaptive_weights=True,
     alpha=10,
-    update_every=1000, 
+    update_every=500, 
     regularization=False,    
 ):
     ratio = 1
@@ -436,7 +436,6 @@ def train_dual_network(
     lambda_k = 1.0
     lambda_pde = 1.0
  
-
     # --------------------------------------------------
     # Helper: compute losses
     # --------------------------------------------------
