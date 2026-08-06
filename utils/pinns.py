@@ -379,7 +379,7 @@ def train_dual_network(
     print_every=100, 
     adaptive_weights=True,
     alpha=10,
-    update_every=500, 
+    update_every=200, 
     regularization=False,    
 ):
     ratio = 1
@@ -712,67 +712,6 @@ def train_dual_network(
                 f"Ratio={ratio:.2f}"
             )
 
-    # # --------------------------------------------------
-    # # L-BFGS
-    # # --------------------------------------------------
-
-    # if verbose:
-    #     print("\n====================================")
-    #     print("Training with L-BFGS")
-    #     print("====================================")
-
-    # state = {"iter": 0}
-
-    # def closure():
-
-    #     optimizer_lbfgs.zero_grad()
-
-    #     lambda_reg=1e-3
-
-    #     total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-    #     total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
-
-    #     total.backward()
-
- 
-
-    #     if epoch == 0:
-
-    #         V = np.array([
-    #             loss_u.item(),
-    #             loss_k.item(),
-    #             loss_pde.item(),
-    #             #reg_t.item()
-    #         ])
-
-    #         ratio = V.max() / (V.min() + 1e-12)
-             
-    #     else:
-    #         ratio = ratio_calculation()
-
-    #     #if (state["iter"]) % update_every == 0 and state["iter"] > 0:
-    #     #    update_loss_weights(loss_u, loss_k, loss_pde)
-  
-    #     save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
-    
-    #     state["iter"] += 1
-
-
-    #     if verbose and state["iter"] % print_every == 0:
-
-    #         print(
-    #             f"L-BFGS {state['iter']:5d} | "
-    #             f"Total={total.item():.3e} | "
-    #             f"ObsU={loss_u.item():.3e} | "
-    #             f"ObsK={loss_k.item():.3e} | "
-    #             f"PDE={loss_pde.item():.3e} | "
-    #             f"Ratio={ratio:.2f}"
-    #         )
-
-
-    #     return total
-
-    # optimizer_lbfgs.step(closure)
 
     # --------------------------------------------------
     # L-BFGS
@@ -898,26 +837,6 @@ def train_dual_network(
                 state["loss_pde"],
             )
 
-            # if verbose:
-
-            #     print(
-            #         "\n------------------------------------"
-            #     )
-
-            #     print(
-            #         f"Adaptive weights updated "
-            #         f"(iteration {iters_done + current_block})"
-            #     )
-
-            #     print(
-            #         f"λu   = {lambda_u:.3f}\n"
-            #         f"λk   = {lambda_k:.3f}\n"
-            #         f"λpde = {lambda_pde:.3f}"
-            #     )
-
-            #     print(
-            #         "Restarting L-BFGS...\n"
-            #     )
 
 
         # --------------------------------------------------
