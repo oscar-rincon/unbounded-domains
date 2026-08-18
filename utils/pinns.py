@@ -378,8 +378,8 @@ def train_dual_network(
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
-    alpha=10,
-    update_every=200, 
+    alpha=1,
+    update_every=100, 
     regularization=False,    
 ):
     ratio = 1
@@ -620,15 +620,7 @@ def train_dual_network(
                 f"ratio  = {ratio:.2f}\n"
                 f"lambda = {lambdas.round(3)}"
             )
-        #lambda_reg_t = lambdas[3]
-        #if verbose:
-
-            #print(
-            #    f"V      = {V.round(4)}\n"
-            #    f"R      = {R.round(3)}\n"
-            #    f"ratio  = {ratio:.2f}\n"
-            #    f"lambda = {lambdas.round(3)}"
-            #)
+ 
         
     # --------------------------------------------------
     # Helper: save history
@@ -665,12 +657,12 @@ def train_dual_network(
 
         optimizer_adam.zero_grad()
 
-        total_no_reg_test = torch.tensor(0.0)  # Initialize total_no_reg_test to avoid undefined variable error
-        total_test = torch.tensor(0.0)  # Initialize total_test to avoid undefined
-        lambda_reg=0
+        # total_no_reg_test = torch.tensor(0.0)  # Initialize total_no_reg_test to avoid undefined variable error
+        # total_test = torch.tensor(0.0)  # Initialize total_test to avoid undefined
+        #lambda_reg=0
 
-        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses()
+        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test()
 
         if epoch == 0:
 
@@ -682,9 +674,9 @@ def train_dual_network(
             ])
 
             ratio = V.max() / (V.min() + 1e-12)
-            update_loss_weights(loss_u, loss_k, loss_pde) 
-            total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(lambda_reg)
-            total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test(lambda_reg)
+        #     update_loss_weights(loss_u, loss_k, loss_pde) 
+        #     total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses()
+        #     total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses_test()
 
         else:
             ratio = ratio_calculation()
@@ -699,10 +691,10 @@ def train_dual_network(
 
 
 
-        save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
+        if epoch % print_every == 0:
+            save_history(total, loss_u, loss_k, loss_pde, ratio, total_test, total_no_reg, total_no_reg_test)
 
         if verbose and epoch % print_every == 0:
-
             print(
                 f"Adam {epoch:5d} | "
                 f"Total={total.item():.3e} | "
@@ -730,13 +722,12 @@ def train_dual_network(
     }
 
     iters_done = 0
-    while iters_done < lbfgs_iters:
+    while iters_done < lbfgs_iters-1:
 
         # --------------------------------------------------
         # Restart L-BFGS every update_every iterations
         # --------------------------------------------------
 
-        #current_block = min(update_every, lbfgs_iters - state["iter"])
         current_block = min(update_every, lbfgs_iters - iters_done)
 
         optimizer_lbfgs = torch.optim.LBFGS(
@@ -753,7 +744,7 @@ def train_dual_network(
 
             optimizer_lbfgs.zero_grad()
 
-            lambda_reg = 1e-3
+            lambda_reg = 0#1e-3
 
             total, loss_u, loss_k, loss_pde, total_no_reg = \
                 compute_losses(lambda_reg)
@@ -793,16 +784,17 @@ def train_dual_network(
             # Save history
             # ------------------------------------------
 
-            save_history(
-                total,
-                loss_u,
-                loss_k,
-                loss_pde,
-                ratio,
-                total_test,
-                total_no_reg,
-                total_no_reg_test,
-            )
+            if state["iter"] % print_every == 0:
+                save_history(
+                    total,
+                    loss_u,
+                    loss_k,
+                    loss_pde,
+                    ratio,
+                    total_test,
+                    total_no_reg,
+                    total_no_reg_test,
+                )
 
             state["iter"] += 1
 
