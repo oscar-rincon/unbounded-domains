@@ -378,8 +378,8 @@ def train_dual_network(
     verbose=False,
     print_every=100, 
     adaptive_weights=True,
-    alpha=1,
-    update_every=100, 
+    alpha=5,
+    update_every=500, 
     regularization=False,    
 ):
     ratio = 1
@@ -734,6 +734,7 @@ def train_dual_network(
             list(model_u.parameters()) + list(model_k.parameters()),
             lr=1.0,
             max_iter=current_block,
+            max_eval=current_block,
             history_size=100,
             tolerance_grad=1e-9,
             tolerance_change=1e-12,
@@ -821,13 +822,13 @@ def train_dual_network(
         # Update adaptive weights
         # --------------------------------------------------
 
-        if adaptive_weights and iters_done < lbfgs_iters:
+        # if adaptive_weights and iters_done < lbfgs_iters:
 
-            update_loss_weights(
-                state["loss_u"],
-                state["loss_k"],
-                state["loss_pde"],
-            )
+        #     update_loss_weights(
+        #         state["loss_u"],
+        #         state["loss_k"],
+        #         state["loss_pde"],
+        #     )
 
 
 
@@ -873,7 +874,7 @@ def run_experiment_inf(
     beta=5.0,
     epsilon=1.0,
     adam_lr=1e-3,
-    adam_iters=1000,
+    adam_iters=2000,
     lbfgs_iters=2000,
     device="cpu",
 ):
