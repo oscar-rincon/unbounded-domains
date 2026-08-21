@@ -440,6 +440,21 @@ def train_dual_network(
     # Helper: compute losses
     # --------------------------------------------------
 
+    def get_weights(epoch):
+
+        if epoch < 250:
+            return 1.0, 1.0, 0.10
+        elif epoch < 500:
+            return 1.0, 1.0, 0.25
+
+        elif epoch < 750:
+            return 1.0, 1.0, 0.50
+        elif epoch < 1000:
+            return 1.0, 1.0, 0.75
+        else:
+            return 1.0, 1.0, 1.00
+
+
     def compute_losses(lambda_reg=1.0):
 
         loss_u = observation_loss_u(
@@ -653,7 +668,7 @@ def train_dual_network(
     model_u.train()
     model_k.train()
 
-    for epoch in range(adam_iters):
+    for epoch in range(adam_iters+1):
 
         optimizer_adam.zero_grad()
 
@@ -686,8 +701,9 @@ def train_dual_network(
         optimizer_adam.step()
 
         #expect in zero 
-        if (epoch) % update_every == 0 and epoch > 0:
-            update_loss_weights(loss_u, loss_k, loss_pde)
+        if adaptive_weights:
+        #    update_loss_weights(loss_u, loss_k, loss_pde)
+            lambda_u, lambda_k, lambda_pde = get_weights(epoch)
 
 
 
