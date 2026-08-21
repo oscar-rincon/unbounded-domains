@@ -60,7 +60,7 @@ def generate_dataset_inf(
     n_pde=10_000,
     n_grid=300,
     sampling="uniform",   # "uniform", "gaussian", "gaussian_exponential"
-    sigma=2.0,
+    sigma=2.5,
     exp_scale=1.0,
     device="cpu",
     dtype=torch.float32,
