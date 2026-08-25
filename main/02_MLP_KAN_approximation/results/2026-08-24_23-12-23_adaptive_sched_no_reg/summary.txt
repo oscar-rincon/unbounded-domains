@@ -1,0 +1,73 @@
+Training run: 2026-08-24_23-12-23_adaptive_sched_no_reg
+========================================
+
+Config:
+  adam_lr: 1.000000e-03
+  adam_iters: 2.000000e+03
+  lbfgs_iters: 2.000000e+03
+  print_every: 1.000000e+02
+  lambda_pde_scheduler: True
+  adaptive_weights: True
+  alpha: 1.000000e+00
+  update_every: 1.000000e+02
+  regularization: False
+
+Model u (displacement network):
+  class: KAN
+  total params: 19,500
+  trainable params: 19,500
+  layers:
+    - layers.0.base_activation: SiLU
+    - layers.1.base_activation: SiLU
+    - layers.2.base_activation: SiLU
+    - layers.3.base_activation: SiLU
+    - layers.4.base_activation: SiLU
+  full architecture:
+    KAN(
+      (layers): ModuleList(
+        (0-4): 5 x KANLinear(
+          (base_activation): SiLU()
+        )
+      )
+    )
+
+Model k (parameter network):
+  class: KAN
+  total params: 19,500
+  trainable params: 19,500
+  layers:
+    - layers.0.base_activation: SiLU
+    - layers.1.base_activation: SiLU
+    - layers.2.base_activation: SiLU
+    - layers.3.base_activation: SiLU
+    - layers.4.base_activation: SiLU
+  full architecture:
+    KAN(
+      (layers): ModuleList(
+        (0-4): 5 x KANLinear(
+          (base_activation): SiLU()
+        )
+      )
+    )
+
+Final losses (last logged step):
+  total: 2.017511e-04
+  total_test: 1.788673e-03
+  u: 2.621608e-06
+  k: 1.563934e-05
+  pde: 1.698932e-04
+  lambda_u: 1.000000e+00
+  lambda_k: 1.869404e+00
+  lambda_pde: 1.000000e+00
+  ratio: 1.422773e+01
+  error_u: 3.237450e-02
+  error_k: 3.939180e-02
+
+Best losses observed during training:
+  total: 2.017511e-04
+  total_test: 1.788673e-03
+  u: 2.621608e-06
+  k: 1.563934e-05
+  pde: 1.698932e-04
+  error_u: 3.237450e-02
+  error_k: 3.939180e-02

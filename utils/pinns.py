@@ -1045,16 +1045,16 @@ def update_loss_weights(
 
         return lambda_u, lambda_k
 
-    ratio_threshold = 10.0
+    #ratio_threshold = 10.0
 
-    if ratio <= ratio_threshold:
-        R = (V - V.min()) / (V.max() - V.min() + 1e-12)
+    #if ratio <= ratio_threshold:
+    #    R = V / (V.mean() + 1e-12) - 1.0#(V - V.min()) / (V.max() - V.min() + 1e-12)
 
-        history["R_u"].append(R[0])
-        history["R_k"].append(R[1])
-        return lambda_u, lambda_k
+    #    history["R_u"].append(R[0])
+    #    history["R_k"].append(R[1])
+    #    return lambda_u, lambda_k
 
-    R = (V - V.min()) / (V.max() - V.min() + 1e-12)
+    R = V / (V.mean() + 1e-12) - 1.0#(V - V.min()) / (V.max() - V.min() + 1e-12)
 
     history["R_u"].append(R[0])
     history["R_k"].append(R[1])
@@ -1490,10 +1490,10 @@ def train_dual_network(
 
         if lambda_pde_scheduler:
             lambda_pde = get_pde_weight(epoch)
-            history["lambda_iteration"].append(epoch)
-            history["lambda_u"].append(lambda_u)
-            history["lambda_k"].append(lambda_k)
-            history["lambda_pde"].append(lambda_pde)
+        history["lambda_iteration"].append(epoch)
+        history["lambda_u"].append(lambda_u)
+        history["lambda_k"].append(lambda_k)
+        history["lambda_pde"].append(lambda_pde)
 
         optimizer_adam.zero_grad()
 
