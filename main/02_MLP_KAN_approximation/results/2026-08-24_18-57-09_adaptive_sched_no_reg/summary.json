@@ -1,0 +1,92 @@
+{
+  "config": {
+    "adam_lr": 0.001,
+    "adam_iters": 2000,
+    "lbfgs_iters": 2000,
+    "print_every": 100,
+    "lambda_pde_scheduler": true,
+    "adaptive_weights": true,
+    "alpha": 1,
+    "update_every": 10,
+    "regularization": false
+  },
+  "n_logged_steps": 41,
+  "final": {
+    "total": 0.00020421175577212125,
+    "total_test": 0.0013745790347456932,
+    "u": 3.972686045017326e-06,
+    "k": 1.4170132999424823e-05,
+    "pde": 0.00017189880600199103,
+    "lambda_u": 1.0,
+    "lambda_k": 1.9999999999977995,
+    "lambda_pde": 1.0,
+    "ratio": 8.710709879155393,
+    "error_u": 0.036536133107462725,
+    "error_k": 0.01459590176358839
+  },
+  "best": {
+    "total": 0.00020421175577212125,
+    "total_test": 0.0013745790347456932,
+    "u": 3.1460558602702804e-06,
+    "k": 1.4170132999424823e-05,
+    "pde": 0.00017189880600199103,
+    "error_u": 0.03149837102441956,
+    "error_k": 0.01459590176358839
+  },
+  "model_u": {
+    "class_name": "KAN",
+    "total_params": 19500,
+    "trainable_params": 19500,
+    "layers": [
+      {
+        "name": "layers.0.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.1.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.2.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.3.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.4.base_activation",
+        "type": "SiLU"
+      }
+    ],
+    "architecture": "KAN(\n  (layers): ModuleList(\n    (0-4): 5 x KANLinear(\n      (base_activation): SiLU()\n    )\n  )\n)"
+  },
+  "model_k": {
+    "class_name": "KAN",
+    "total_params": 19500,
+    "trainable_params": 19500,
+    "layers": [
+      {
+        "name": "layers.0.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.1.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.2.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.3.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.4.base_activation",
+        "type": "SiLU"
+      }
+    ],
+    "architecture": "KAN(\n  (layers): ModuleList(\n    (0-4): 5 x KANLinear(\n      (base_activation): SiLU()\n    )\n  )\n)"
+  }
+}
