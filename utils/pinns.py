@@ -1045,21 +1045,23 @@ def update_loss_weights(
 
         return lambda_u, lambda_k
 
-    #ratio_threshold = 10.0
+    ratio_threshold = 10.0
 
-    #if ratio <= ratio_threshold:
-    #    R = V / (V.mean() + 1e-12) - 1.0#(V - V.min()) / (V.max() - V.min() + 1e-12)
+    if ratio <= ratio_threshold:
+       R = (V - V.min()) / (V.max() - V.min() + 1e-12)
 
-    #    history["R_u"].append(R[0])
-    #    history["R_k"].append(R[1])
-    #    return lambda_u, lambda_k
+       history["R_u"].append(R[0])
+       history["R_k"].append(R[1])
+       return lambda_u, lambda_k
 
-    R = V / (V.mean() + 1e-12) - 1.0#(V - V.min()) / (V.max() - V.min() + 1e-12)
+    R = (V - V.min()) / (V.max() - V.min() + 1e-12)
 
     history["R_u"].append(R[0])
     history["R_k"].append(R[1])
 
-    lambdas = 1.0 + alpha * R
+    effective_alpha = alpha * (1.0 + ratio / ratio_threshold)
+
+    lambdas = 1.0 + effective_alpha  * R
     fastest = np.argmin(V)
     lambdas[fastest] = 1.0
 
@@ -1429,7 +1431,7 @@ def train_dual_network(
     save_every=100,
     lambda_pde_scheduler=False,
     adaptive_weights=False,
-    alpha=5,
+    alpha=7,
     update_every=100,
     regularization=False,
     save_results=True,
@@ -1577,6 +1579,9 @@ def train_dual_network(
         optimizer_lbfgs.zero_grad()
         lambda_reg = 0
 
+        #if lambda_pde_scheduler:
+        #    lambda_pde = get_pde_weight(state["iter"] + adam_iters)
+
         total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(
             model_u, model_k,
             X_obs_train, U_obs_train, X_obs_k_train, K_obs_train,
@@ -1599,6 +1604,15 @@ def train_dual_network(
         #    ratio = V.max() / (V.min() + 1e-12)
         #else:
         ratio = ratio_calculation(history, update_every)
+
+
+        if adaptive_weights and state["iter"] % update_every == 0 and state["iter"] > 0:
+            #print(f"Epoch {epoch}: updating loss weights (lambda_u, lambda_k)")
+            lambda_u, lambda_k = update_loss_weights(
+                history, state["iter"] + adam_iters, lambda_u, lambda_k, lambda_pde,
+                loss_u, loss_k, update_every, alpha,
+                adaptive_weights, verbose,
+            )
 
         state["loss_u"] = loss_u.detach()
         state["loss_k"] = loss_k.detach()
