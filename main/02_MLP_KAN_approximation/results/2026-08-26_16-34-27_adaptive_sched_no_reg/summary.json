@@ -1,0 +1,74 @@
+{
+  "config": {
+    "adam_lr": 0.001,
+    "adam_iters": 2000,
+    "lbfgs_iters": 2000,
+    "print_every": 100,
+    "lambda_pde_scheduler": true,
+    "adaptive_weights": true,
+    "alpha": 1,
+    "update_every": 100,
+    "regularization": false
+  },
+  "n_logged_steps": 26,
+  "final": {
+    "total": 0.0029865719843655825,
+    "u": 0.00010712785297073424,
+    "k": 1.947681448655203e-05,
+    "pde": 0.002728760940954089,
+    "lambda_u": 1.0,
+    "lambda_k": 7.728309347657862,
+    "lambda_pde": 1.0,
+    "ratio": 57.365401403980634,
+    "error_u": 0.14431979116517915,
+    "error_k": 0.0042772109918488435
+  },
+  "model_u": {
+    "class_name": "KANWithAlpha",
+    "total_params": 13251,
+    "trainable_params": 13251,
+    "layers": [
+      {
+        "name": "network.layers.0.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "network.layers.1.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "network.layers.2.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "network.layers.3.base_activation",
+        "type": "SiLU"
+      }
+    ],
+    "architecture": "KANWithAlpha(\n  (network): KAN(\n    (layers): ModuleList(\n      (0-3): 4 x KANLinear(\n        (base_activation): SiLU()\n      )\n    )\n  )\n)"
+  },
+  "model_k": {
+    "class_name": "KAN",
+    "total_params": 13250,
+    "trainable_params": 13250,
+    "layers": [
+      {
+        "name": "layers.0.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.1.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.2.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.3.base_activation",
+        "type": "SiLU"
+      }
+    ],
+    "architecture": "KAN(\n  (layers): ModuleList(\n    (0-3): 4 x KANLinear(\n      (base_activation): SiLU()\n    )\n  )\n)"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "config": {
+    "adam_lr": 0.001,
+    "adam_iters": 2000,
+    "lbfgs_iters": 2000,
+    "print_every": 100,
+    "lambda_pde_scheduler": true,
+    "adaptive_weights": true,
+    "alpha": 1,
+    "update_every": 100,
+    "regularization": false
+  },
+  "n_logged_steps": 41,
+  "final": {
+    "total": 0.0010035772575065494,
+    "u": 6.741144170518965e-05,
+    "k": 8.894606253306847e-06,
+    "pde": 0.000890144263394177,
+    "lambda_u": 1.0,
+    "lambda_k": 5.17409561820142,
+    "lambda_pde": 1.0,
+    "ratio": 31.740956182385876,
+    "error_u": 0.03224823584850066,
+    "error_k": 0.03255560999850215
+  },
+  "model_u": {
+    "class_name": "KANWithAlpha",
+    "total_params": 19501,
+    "trainable_params": 19501,
+    "layers": [
+      {
+        "name": "network.layers.0.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "network.layers.1.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "network.layers.2.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "network.layers.3.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "network.layers.4.base_activation",
+        "type": "SiLU"
+      }
+    ],
+    "architecture": "KANWithAlpha(\n  (network): KAN(\n    (layers): ModuleList(\n      (0-4): 5 x KANLinear(\n        (base_activation): SiLU()\n      )\n    )\n  )\n)"
+  },
+  "model_k": {
+    "class_name": "KAN",
+    "total_params": 19500,
+    "trainable_params": 19500,
+    "layers": [
+      {
+        "name": "layers.0.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.1.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.2.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.3.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.4.base_activation",
+        "type": "SiLU"
+      }
+    ],
+    "architecture": "KAN(\n  (layers): ModuleList(\n    (0-4): 5 x KANLinear(\n      (base_activation): SiLU()\n    )\n  )\n)"
+  }
+}

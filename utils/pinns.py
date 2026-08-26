@@ -109,6 +109,83 @@ class MLP(nn.Module):
         x = self.linear_out(x)
         return x    
 
+class MLPWithAlpha(nn.Module):
+
+    def __init__(
+        self,
+        input_size,
+        output_size,
+        hidden_layers,
+        hidden_units,
+        activation_function,
+        alpha_init=10.0,
+    ):
+        super().__init__()
+
+        # ---------------------------------------------
+        # Neural network
+        # ---------------------------------------------
+
+        self.network = MLP(
+            input_size=input_size,
+            output_size=output_size,
+            hidden_layers=hidden_layers,
+            hidden_units=hidden_units,
+            activation_function=activation_function,
+        )
+
+        # ---------------------------------------------
+        # Learnable alpha
+        #
+        # We optimize log(alpha) so that
+        # alpha is always positive.
+        # ---------------------------------------------
+
+        self.log_alpha = nn.Parameter(
+            torch.tensor(
+                np.log(alpha_init),
+                dtype=torch.float32
+            )
+        )
+
+    @property
+    def alpha(self):
+
+        return torch.exp(self.log_alpha)
+
+    def forward(self, X):
+
+        # ---------------------------------------------
+        # Coordinates
+        # ---------------------------------------------
+
+        x = X[:, 0:1]
+        y = X[:, 1:2]
+
+        r2 = x**2 + y**2
+
+        # ---------------------------------------------
+        # Exponential decay
+        # ---------------------------------------------
+
+        envelope = torch.exp(
+            -self.alpha * r2
+        )
+
+        # ---------------------------------------------
+        # Neural network
+        # ---------------------------------------------
+
+        v = self.network(X)
+
+        # ---------------------------------------------
+        # Solution ansatz
+        # ---------------------------------------------
+
+        u = envelope * v
+
+        return u
+
 def create_kan(
     input_size,
     output_size,
@@ -138,6 +215,82 @@ def create_kan(
         grid_size=grid_size,
         spline_order=spline_order,
     )
+
+
+class KANWithAlpha(nn.Module):
+
+    def __init__(
+        self,
+        input_size=2,
+        output_size=1,
+        hidden_layers=3,
+        hidden_units=25,
+        grid_size=3,
+        spline_order=3,
+        alpha_init=0.25,
+    ):
+        super().__init__()
+
+        # --------------------------------------------------
+        # KAN
+        # --------------------------------------------------
+
+        self.network = create_kan(
+            input_size=input_size,
+            output_size=output_size,
+            hidden_layers=hidden_layers,
+            hidden_units=hidden_units,
+            grid_size=grid_size,
+            spline_order=spline_order,
+        )
+
+        # --------------------------------------------------
+        # Trainable alpha
+        # --------------------------------------------------
+        # We optimize log(alpha) so that alpha > 0.
+        # --------------------------------------------------
+
+        self.log_alpha = nn.Parameter(
+            torch.tensor(
+                np.log(alpha_init),
+                dtype=torch.float32
+            )
+        )
+
+    # ------------------------------------------------------
+    # Physical parameter
+    # ------------------------------------------------------
+
+    @property
+    def alpha(self):
+
+        return torch.exp(self.log_alpha)
+
+    # ------------------------------------------------------
+    # Forward
+    # ------------------------------------------------------
+
+    def forward(self, X):
+
+        # Coordinates
+        x = X[:, 0:1]
+        y = X[:, 1:2]
+
+        # r^2 = x^2 + y^2
+        r2 = x**2 + y**2
+
+        # Exponential decay
+        envelope = torch.exp(
+            -self.alpha * r2
+        )
+
+        # KAN prediction
+        v = self.network(X)
+
+        # Solution
+        u = envelope * v
+
+        return u
 
 class CoefficientNet(nn.Module):
 
@@ -333,16 +486,25 @@ def observation_loss_k(
 
 def build_models_KAN(
     device,
+    alpha_init=10.0,
     hidden_layers=3,
     hidden_units=25,
     grid_size=5,
     spline_order=3,
 ):
-    model_u = KAN(
-        layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
+    # model_u = KAN(
+    #     layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
+    #     grid_size=grid_size,
+    #     spline_order=spline_order,
+    #     grid_range=[-5,5],
+    # ).to(device)
+
+    model_u = KANWithAlpha(
+        hidden_layers=hidden_layers,
+        hidden_units=hidden_units,
         grid_size=grid_size,
         spline_order=spline_order,
-        grid_range=[-5,5],
+        alpha_init=alpha_init,
     ).to(device)
 
     model_k = KAN(
@@ -368,6 +530,14 @@ def build_models(
         activation_function=activation,
     ).to(device)#.double()
 
+    # model_u = MLPWithAlpha(
+    #     input_size=2,
+    #     output_size=1,
+    #     hidden_layers=hidden_layers,
+    #     hidden_units=hidden_units,
+    #     activation_function=activation,
+    #     alpha_init=0.25,
+    # )
     # model_k = MLP(
     #     input_size=2,
     #     output_size=1,
@@ -1131,9 +1301,9 @@ def save_history_entry(
     loss_k,
     loss_pde,
     ratio,
-    total_test,
+    #total_test,
     total_no_reg,
-    total_no_reg_test,
+    #total_no_reg_test,
     err_u=None,
     err_k=None,
 ):
@@ -1143,9 +1313,9 @@ def save_history_entry(
     history["k"].append(loss_k.item())
     history["pde"].append(loss_pde.item())
     history["ratio"].append(ratio)
-    history["total_test"].append(total_test.item())
+    #history["total_test"].append(total_test.item())
     history["total_no_reg"].append(total_no_reg.item())
-    history["total_no_reg_test"].append(total_no_reg_test.item())
+   # history["total_no_reg_test"].append(total_no_reg_test.item())
 
     # err_u / err_k come from evaluate_model_inf against the analytical
     # solution -- optional, since they require analytical_solution_inf /
@@ -1259,7 +1429,7 @@ def build_training_summary(history, config, model_u=None, model_k=None):
         "n_logged_steps": len(history.get("total", [])),
         "final": {
             "total": last("total"),
-            "total_test": last("total_test"),
+            #"total_test": last("total_test"),
             "u": last("u"),
             "k": last("k"),
             "pde": last("pde"),
@@ -1270,15 +1440,15 @@ def build_training_summary(history, config, model_u=None, model_k=None):
             "error_u": last_valid("error_u"),
             "error_k": last_valid("error_k"),
         },
-        "best": {
-            "total": best("total"),
-            "total_test": best("total_test"),
-            "u": best("u"),
-            "k": best("k"),
-            "pde": best("pde"),
-            "error_u": best_valid("error_u"),
-            "error_k": best_valid("error_k"),
-        },
+        # "best": {
+        #     "total": best("total"),
+        #     "total_test": best("total_test"),
+        #     "u": best("u"),
+        #     "k": best("k"),
+        #     "pde": best("pde"),
+        #     "error_u": best_valid("error_u"),
+        #     "error_k": best_valid("error_k"),
+        # },
     }
 
     if model_u is not None:
@@ -1323,7 +1493,7 @@ def _format_value(v):
 def format_summary_text(summary, run_name):
     cfg = summary["config"]
     fin = summary["final"]
-    bst = summary["best"]
+    # bst = summary["best"]
 
     lines = [f"Training run: {run_name}", "=" * 40, "", "Config:"]
     for k, v in cfg.items():
@@ -1338,9 +1508,9 @@ def format_summary_text(summary, run_name):
     for k, v in fin.items():
         lines.append(f"  {k}: {_format_value(v)}")
 
-    lines += ["", "Best losses observed during training:"]
-    for k, v in bst.items():
-        lines.append(f"  {k}: {_format_value(v)}")
+    # lines += ["", "Best losses observed during training:"]
+    # for k, v in bst.items():
+    #     lines.append(f"  {k}: {_format_value(v)}")
 
     return "\n".join(lines) + "\n"
 
@@ -1417,12 +1587,12 @@ def train_dual_network(
     K_obs_train,
     X_pde_train,
     F_pde_train,
-    X_obs_test,
-    U_obs_test,
-    X_obs_k_test,
-    K_obs_test,
-    X_pde_test,
-    F_pde_test,
+    # X_obs_test,
+    # U_obs_test,
+    # X_obs_k_test,
+    # K_obs_test,
+    # X_pde_test,
+    # F_pde_test,
     adam_lr=1e-3,
     adam_iters=2000,
     lbfgs_iters=2000,
@@ -1444,6 +1614,18 @@ def train_dual_network(
     pde_beta=5,
     epsilon=1,
     device=None,
+
+    # --------------------------------------------------
+    # Adaptive PDE resampling
+    # --------------------------------------------------
+
+    resample=True,
+    resample_every=100,
+    sampling="gaussian",
+    sampling_scale=1.0,
+    n_pde=None,
+    domain=(-5.0, 5.0),
+    seed=0,
 ):
     """analytical_solution_inf
             alpha=pde_alpha,
@@ -1451,6 +1633,8 @@ def train_dual_network(
             epsilon=epsilon,
     """
     criterion = nn.MSELoss()
+    if n_pde is None:
+        n_pde = X_pde_train.shape[0]
 
     parameters = list(model_u.parameters()) + list(model_k.parameters())
 
@@ -1476,6 +1660,20 @@ def train_dual_network(
     lambda_u = 1.0
     lambda_k = 1.0
     lambda_pde = 1.0
+
+    # --------------------------------------------------
+    # Initial estimated alpha
+    # --------------------------------------------------
+
+    if hasattr(model_u, "alpha"):
+        alpha_est = model_u.alpha.detach().cpu().item()
+    else:
+        alpha_est = None
+
+    if verbose and alpha_est is not None:
+        print(
+            f"Initial estimated alpha = {alpha_est:.6f}"
+        )
 
     # --------------------------------------------------
     # Adam
@@ -1506,13 +1704,13 @@ def train_dual_network(
             criterion, lambda_u, lambda_k, lambda_pde,
             parameters, regularization,
         )
-        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses(
-            model_u, model_k,
-            X_obs_test, U_obs_test, X_obs_k_test, K_obs_test,
-            X_pde_test, F_pde_test,
-            criterion, lambda_u, lambda_k, lambda_pde,
-            parameters, regularization,
-        )
+        # total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses(
+        #     model_u, model_k,
+        #     X_obs_test, U_obs_test, X_obs_k_test, K_obs_test,
+        #     X_pde_test, F_pde_test,
+        #     criterion, lambda_u, lambda_k, lambda_pde,
+        #     parameters, regularization,
+        # )
 
         if epoch == 0:
            V = np.array([loss_u.item(), loss_k.item()])
@@ -1522,6 +1720,86 @@ def train_dual_network(
 
         total.backward()
         optimizer_adam.step()
+
+        # --------------------------------------------------
+        # Adaptive resampling
+        # --------------------------------------------------
+
+        if (
+            resample
+            and epoch > 0
+            and epoch % resample_every == 0
+        ):
+
+            # ----------------------------------------------
+            # Get current estimated alpha
+            # ----------------------------------------------
+
+            if not hasattr(model_u, "alpha"):
+                raise AttributeError(
+                    "model_u does not have a trainable 'alpha'. "
+                    "Use KANWithAlpha for model_u."
+                )
+
+            alpha_est = (
+                model_u.alpha
+                .detach()
+                .cpu()
+                .item()
+            )
+
+            # ----------------------------------------------
+            # Avoid invalid / pathological values
+            # ----------------------------------------------
+
+            if alpha_est <= 0:
+                raise ValueError(
+                    f"Estimated alpha must be positive. "
+                    f"Got alpha={alpha_est}"
+                )
+
+            # ----------------------------------------------
+            # Generate new PDE points
+            #
+            # alpha_true = pde_alpha
+            # alpha_sampling = alpha_est
+            # ----------------------------------------------
+
+            (
+                X_obs_train,
+                U_obs_train,
+                X_obs_k_train,
+                K_obs_train,
+                X_pde_train,
+                F_pde_train,
+                _,
+                _,
+                _,
+            ) = generate_dataset_inf(
+                alpha_true=pde_alpha,
+                alpha_sampling=alpha_est,
+                beta=pde_beta,
+                epsilon=epsilon,
+                domain=domain,
+                n_obs_u=X_obs_train.shape[0],
+                n_obs_k=X_obs_k_train.shape[0],
+                n_pde=n_pde,
+                sampling=sampling,
+                sampling_scale=sampling_scale,
+                device=device,
+                dtype=X_pde_train.dtype,
+                plot=False,
+                seed=seed + epoch,
+            )
+
+            # ----------------------------------------------
+            # Report
+            # ----------------------------------------------
+
+            print(
+                    f"    alpha_est = {alpha_est:.6f}"
+                )
+
 
         if adaptive_weights and epoch % update_every == 0 and epoch > 0:
             #print(f"Epoch {epoch}: updating loss weights (lambda_u, lambda_k)")
@@ -1559,8 +1837,7 @@ def train_dual_network(
             # )
             save_history_entry(
                 history, epoch, total, loss_u, loss_k, loss_pde, ratio,
-                total_test, total_no_reg, total_no_reg_test,
-                err_u=err_u, err_k=err_k,
+                total_no_reg, err_u=err_u, err_k=err_k,
             )
     # --------------------------------------------------
     # L-BFGS
@@ -1574,8 +1851,64 @@ def train_dual_network(
     iters_done = 0
 
     def closure():
-        nonlocal lambda_u, lambda_k
+        nonlocal lambda_u, lambda_k, X_obs_train, U_obs_train, X_obs_k_train, K_obs_train, X_pde_train, F_pde_train
 
+ 
+        # # --------------------------------------------------
+        # # Resampling
+        # # --------------------------------------------------
+
+        if (
+            resample
+            and state["iter"]== resample_every
+            and state["iter"] < lbfgs_iters
+        ):
+
+            alpha_est = (
+                model_u.alpha
+                .detach()
+                .cpu()
+                .item()
+            )
+
+
+            (
+                X_obs_train,
+                U_obs_train,
+                X_obs_k_train,
+                K_obs_train,
+                X_pde_train,
+                F_pde_train,
+                _,
+                _,
+                _,
+            ) = generate_dataset_inf(
+                alpha_true=pde_alpha,
+                alpha_sampling=alpha_est,
+                beta=pde_beta,
+                epsilon=epsilon,
+                domain=domain,
+                n_obs_u=X_obs_train.shape[0],
+                n_obs_k=X_obs_k_train.shape[0],
+                n_pde=n_pde,
+                sampling=sampling,
+                sampling_scale=sampling_scale,
+                device=device,
+                dtype=X_pde_train.dtype,
+                plot=False,
+                seed=seed + adam_iters + state["iter"],
+            )
+
+            if verbose:
+
+                print(
+                    f"\n"
+                    f"------------------------------------\n"
+                    f"alpha     : {alpha_est:.6f}\n"
+                    f"------------------------------------"
+                )
+
+ 
         optimizer_lbfgs.zero_grad()
         lambda_reg = 0
 
@@ -1589,13 +1922,13 @@ def train_dual_network(
             criterion, lambda_u, lambda_k, lambda_pde,
             parameters, regularization, lambda_reg,
         )
-        total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses(
-            model_u, model_k,
-            X_obs_test, U_obs_test, X_obs_k_test, K_obs_test,
-            X_pde_test, F_pde_test,
-            criterion, lambda_u, lambda_k, lambda_pde,
-            parameters, regularization, lambda_reg,
-        )
+        # total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses(
+        #     model_u, model_k,
+        #     X_obs_test, U_obs_test, X_obs_k_test, K_obs_test,
+        #     X_pde_test, F_pde_test,
+        #     criterion, lambda_u, lambda_k, lambda_pde,
+        #     parameters, regularization, lambda_reg,
+        # )
 
         total.backward()
 
@@ -1618,8 +1951,7 @@ def train_dual_network(
         state["loss_k"] = loss_k.detach()
         state["loss_pde"] = loss_pde.detach()
 
-
-
+        #lbfgs_done += 1
         state["iter"] += 1
 
         if verbose and state["iter"] % print_every == 0:
@@ -1654,7 +1986,8 @@ def train_dual_network(
             )
             save_history_entry(
                 history, state["iter"] + adam_iters, total, loss_u, loss_k, loss_pde, ratio,
-                total_test, total_no_reg, total_no_reg_test,
+                # total_test, total_no_reg, total_no_reg_test,
+                total_no_reg, 
                 err_u=err_u, err_k=err_k,
             )
 
