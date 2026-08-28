@@ -1725,72 +1725,72 @@ def train_dual_network(
         # # Adaptive resampling
         # # --------------------------------------------------
 
-        if (
-            resample
-            and epoch > 0
-            and epoch % resample_every == 0
-        ):
+        # if (
+        #     resample
+        #     and epoch > 0
+        #     and epoch % resample_every == 0
+        # ):
+
+        # #     # ----------------------------------------------
+        # #     # Get current estimated alpha
+        # #     # ----------------------------------------------
+
+        # #     if not hasattr(model_u, "alpha"):
+        # #         raise AttributeError(
+        # #             "model_u does not have a trainable 'alpha'. "
+        # #             "Use KANWithAlpha for model_u."
+        # #         )
+
+        # #     alpha_est = (
+        # #         model_u.alpha
+        # #         .detach()
+        # #         .cpu()
+        # #         .item()
+        # #     )
+
+        #     # # ----------------------------------------------
+        #     # # Avoid invalid / pathological values
+        #     # # ----------------------------------------------
+
+        #     # if alpha_est <= 0:
+        #     #     raise ValueError(
+        #     #         f"Estimated alpha must be positive. "
+        #     #         f"Got alpha={alpha_est}"
+        #     #     )
 
         #     # ----------------------------------------------
-        #     # Get current estimated alpha
+        #     # Generate new PDE points
+        #     #
+        #     # alpha_true = pde_alpha
+        #     # alpha_sampling = alpha_est
         #     # ----------------------------------------------
 
-        #     if not hasattr(model_u, "alpha"):
-        #         raise AttributeError(
-        #             "model_u does not have a trainable 'alpha'. "
-        #             "Use KANWithAlpha for model_u."
-        #         )
-
-        #     alpha_est = (
-        #         model_u.alpha
-        #         .detach()
-        #         .cpu()
-        #         .item()
+        #     (
+        #         X_obs_train,
+        #         U_obs_train,
+        #         X_obs_k_train,
+        #         K_obs_train,
+        #         X_pde_train,
+        #         F_pde_train,
+        #         _,
+        #         _,
+        #         _,
+        #     ) = generate_dataset_inf(
+        #         alpha_true=pde_alpha,
+        #         alpha_sampling=0.5,
+        #         beta=pde_beta,
+        #         epsilon=epsilon,
+        #         domain=domain,
+        #         n_obs_u=X_obs_train.shape[0],
+        #         n_obs_k=X_obs_k_train.shape[0],
+        #         n_pde=n_pde,
+        #         sampling=sampling,
+        #         sampling_scale=sampling_scale,
+        #         device=device,
+        #         dtype=X_pde_train.dtype,
+        #         plot=False,
+        #         seed=seed + epoch,
         #     )
-
-            # # ----------------------------------------------
-            # # Avoid invalid / pathological values
-            # # ----------------------------------------------
-
-            # if alpha_est <= 0:
-            #     raise ValueError(
-            #         f"Estimated alpha must be positive. "
-            #         f"Got alpha={alpha_est}"
-            #     )
-
-            # ----------------------------------------------
-            # Generate new PDE points
-            #
-            # alpha_true = pde_alpha
-            # alpha_sampling = alpha_est
-            # ----------------------------------------------
-
-            (
-                X_obs_train,
-                U_obs_train,
-                X_obs_k_train,
-                K_obs_train,
-                X_pde_train,
-                F_pde_train,
-                _,
-                _,
-                _,
-            ) = generate_dataset_inf(
-                alpha_true=pde_alpha,
-                alpha_sampling=0.5,
-                beta=pde_beta,
-                epsilon=epsilon,
-                domain=domain,
-                n_obs_u=X_obs_train.shape[0],
-                n_obs_k=X_obs_k_train.shape[0],
-                n_pde=n_pde,
-                sampling=sampling,
-                sampling_scale=sampling_scale,
-                device=device,
-                dtype=X_pde_train.dtype,
-                plot=False,
-                seed=seed + epoch,
-            )
 
             # # ----------------------------------------------
             # # Report
@@ -1854,50 +1854,50 @@ def train_dual_network(
         nonlocal lambda_u, lambda_k, X_obs_train, U_obs_train, X_obs_k_train, K_obs_train, X_pde_train, F_pde_train
 
  
-        # # --------------------------------------------------
-        # # Resampling
-        # # --------------------------------------------------
+        # # # --------------------------------------------------
+        # # # Resampling
+        # # # --------------------------------------------------
 
-        if (
-            resample
-            and state["iter"]== resample_every
-            and state["iter"] < lbfgs_iters
-        ):
+        # if (
+        #     resample
+        #     and state["iter"]== resample_every
+        #     and state["iter"] < lbfgs_iters
+        # ):
 
-            # alpha_est = (
-            #     model_u.alpha
-            #     .detach()
-            #     .cpu()
-            #     .item()
-            # )
+        #     # alpha_est = (
+        #     #     model_u.alpha
+        #     #     .detach()
+        #     #     .cpu()
+        #     #     .item()
+        #     # )
 
 
-            (
-                X_obs_train,
-                U_obs_train,
-                X_obs_k_train,
-                K_obs_train,
-                X_pde_train,
-                F_pde_train,
-                _,
-                _,
-                _,
-            ) = generate_dataset_inf(
-                alpha_true=pde_alpha,
-                alpha_sampling=0.5,
-                beta=pde_beta,
-                epsilon=epsilon,
-                domain=domain,
-                n_obs_u=X_obs_train.shape[0],
-                n_obs_k=X_obs_k_train.shape[0],
-                n_pde=n_pde,
-                sampling=sampling,
-                sampling_scale=sampling_scale,
-                device=device,
-                dtype=X_pde_train.dtype,
-                plot=False,
-                seed=seed + adam_iters + state["iter"],
-            )
+        #     (
+        #         X_obs_train,
+        #         U_obs_train,
+        #         X_obs_k_train,
+        #         K_obs_train,
+        #         X_pde_train,
+        #         F_pde_train,
+        #         _,
+        #         _,
+        #         _,
+        #     ) = generate_dataset_inf(
+        #         alpha_true=pde_alpha,
+        #         alpha_sampling=0.5,
+        #         beta=pde_beta,
+        #         epsilon=epsilon,
+        #         domain=domain,
+        #         n_obs_u=X_obs_train.shape[0],
+        #         n_obs_k=X_obs_k_train.shape[0],
+        #         n_pde=n_pde,
+        #         sampling=sampling,
+        #         sampling_scale=sampling_scale,
+        #         device=device,
+        #         dtype=X_pde_train.dtype,
+        #         plot=False,
+        #         seed=seed + adam_iters + state["iter"],
+        #     )
 
  
 
