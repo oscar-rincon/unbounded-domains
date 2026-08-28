@@ -613,21 +613,21 @@ def generate_dataset_inf(
             linewidths=0.25,
         )
 
-        if sampling in [
-            "gaussian",
-            "gaussian_exponential"
-        ]:
+        #if sampling in [
+        #    "gaussian",
+        #    "gaussian_exponential"
+        #]:
 
-            ax[0].set_title(
-                rf"$u(x,y)$ ({sampling}, "
-                rf"$\sigma={sigma:.2f}$)"
-            )
+            #ax[0].set_title(
+            #    rf"$u(x,y)$ ({sampling}, "
+                #rf"$\sigma={sigma:.2f}$)"
+            #)
 
-        else:
+        #else:
 
-            ax[0].set_title(
-                rf"$u(x,y)$ ({sampling})"
-            )
+         #   ax[0].set_title(
+         #       rf"$u(x,y)$ ({sampling})"
+         #   )
 
         ax[0].set_xlabel("$x$")
         ax[0].set_ylabel("$y$")
@@ -670,9 +670,9 @@ def generate_dataset_inf(
 
         ax[1].set_xlabel("$x$")
         ax[1].set_ylabel("$y$")
-        ax[1].set_title(
-            r"$k$ observation locations"
-        )
+        #ax[1].set_title(
+        #    r"$k$ observation locations"
+        #)
         ax[1].set_aspect("equal")
 
         fig.colorbar(

@@ -492,20 +492,20 @@ def build_models_KAN(
     grid_size=5,
     spline_order=3,
 ):
-    # model_u = KAN(
-    #     layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
-    #     grid_size=grid_size,
-    #     spline_order=spline_order,
-    #     grid_range=[-5,5],
-    # ).to(device)
-
-    model_u = KANWithAlpha(
-        hidden_layers=hidden_layers,
-        hidden_units=hidden_units,
+    model_u = KAN(
+        layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
         grid_size=grid_size,
         spline_order=spline_order,
-        alpha_init=alpha_init,
+        grid_range=[-5,5],
     ).to(device)
+
+    # model_u = KANWithAlpha(
+    #     hidden_layers=hidden_layers,
+    #     hidden_units=hidden_units,
+    #     grid_size=grid_size,
+    #     spline_order=spline_order,
+    #     alpha_init=alpha_init,
+    # ).to(device)
 
     model_k = KAN(
         layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
@@ -1620,7 +1620,7 @@ def train_dual_network(
     # --------------------------------------------------
 
     resample=True,
-    resample_every=100,
+    resample_every=500,
     sampling="gaussian",
     sampling_scale=1.0,
     n_pde=None,
@@ -1661,19 +1661,19 @@ def train_dual_network(
     lambda_k = 1.0
     lambda_pde = 1.0
 
-    # --------------------------------------------------
-    # Initial estimated alpha
-    # --------------------------------------------------
+    # # --------------------------------------------------
+    # # Initial estimated alpha
+    # # --------------------------------------------------
 
-    if hasattr(model_u, "alpha"):
-        alpha_est = model_u.alpha.detach().cpu().item()
-    else:
-        alpha_est = None
+    # if hasattr(model_u, "alpha"):
+    #     alpha_est = model_u.alpha.detach().cpu().item()
+    # else:
+    #     alpha_est = None
 
-    if verbose and alpha_est is not None:
-        print(
-            f"Initial estimated alpha = {alpha_est:.6f}"
-        )
+    # if verbose and alpha_est is not None:
+    #     print(
+    #         f"Initial estimated alpha = {alpha_est:.6f}"
+    #     )
 
     # --------------------------------------------------
     # Adam
@@ -1721,9 +1721,9 @@ def train_dual_network(
         total.backward()
         optimizer_adam.step()
 
-        # --------------------------------------------------
-        # Adaptive resampling
-        # --------------------------------------------------
+        # # --------------------------------------------------
+        # # Adaptive resampling
+        # # --------------------------------------------------
 
         if (
             resample
@@ -1731,32 +1731,32 @@ def train_dual_network(
             and epoch % resample_every == 0
         ):
 
-            # ----------------------------------------------
-            # Get current estimated alpha
-            # ----------------------------------------------
+        #     # ----------------------------------------------
+        #     # Get current estimated alpha
+        #     # ----------------------------------------------
 
-            if not hasattr(model_u, "alpha"):
-                raise AttributeError(
-                    "model_u does not have a trainable 'alpha'. "
-                    "Use KANWithAlpha for model_u."
-                )
+        #     if not hasattr(model_u, "alpha"):
+        #         raise AttributeError(
+        #             "model_u does not have a trainable 'alpha'. "
+        #             "Use KANWithAlpha for model_u."
+        #         )
 
-            alpha_est = (
-                model_u.alpha
-                .detach()
-                .cpu()
-                .item()
-            )
+        #     alpha_est = (
+        #         model_u.alpha
+        #         .detach()
+        #         .cpu()
+        #         .item()
+        #     )
 
-            # ----------------------------------------------
-            # Avoid invalid / pathological values
-            # ----------------------------------------------
+            # # ----------------------------------------------
+            # # Avoid invalid / pathological values
+            # # ----------------------------------------------
 
-            if alpha_est <= 0:
-                raise ValueError(
-                    f"Estimated alpha must be positive. "
-                    f"Got alpha={alpha_est}"
-                )
+            # if alpha_est <= 0:
+            #     raise ValueError(
+            #         f"Estimated alpha must be positive. "
+            #         f"Got alpha={alpha_est}"
+            #     )
 
             # ----------------------------------------------
             # Generate new PDE points
@@ -1777,7 +1777,7 @@ def train_dual_network(
                 _,
             ) = generate_dataset_inf(
                 alpha_true=pde_alpha,
-                alpha_sampling=alpha_est,
+                alpha_sampling=0.5,
                 beta=pde_beta,
                 epsilon=epsilon,
                 domain=domain,
@@ -1792,13 +1792,13 @@ def train_dual_network(
                 seed=seed + epoch,
             )
 
-            # ----------------------------------------------
-            # Report
-            # ----------------------------------------------
+            # # ----------------------------------------------
+            # # Report
+            # # ----------------------------------------------
 
-            print(
-                    f"    alpha_est = {alpha_est:.6f}"
-                )
+            # print(
+            #         f"    alpha_est = {alpha_est:.6f}"
+            #     )
 
 
         if adaptive_weights and epoch % update_every == 0 and epoch > 0:
@@ -1864,12 +1864,12 @@ def train_dual_network(
             and state["iter"] < lbfgs_iters
         ):
 
-            alpha_est = (
-                model_u.alpha
-                .detach()
-                .cpu()
-                .item()
-            )
+            # alpha_est = (
+            #     model_u.alpha
+            #     .detach()
+            #     .cpu()
+            #     .item()
+            # )
 
 
             (
@@ -1884,7 +1884,7 @@ def train_dual_network(
                 _,
             ) = generate_dataset_inf(
                 alpha_true=pde_alpha,
-                alpha_sampling=alpha_est,
+                alpha_sampling=0.5,
                 beta=pde_beta,
                 epsilon=epsilon,
                 domain=domain,
@@ -1899,14 +1899,7 @@ def train_dual_network(
                 seed=seed + adam_iters + state["iter"],
             )
 
-            if verbose:
-
-                print(
-                    f"\n"
-                    f"------------------------------------\n"
-                    f"alpha     : {alpha_est:.6f}\n"
-                    f"------------------------------------"
-                )
+ 
 
  
         optimizer_lbfgs.zero_grad()
