@@ -1587,12 +1587,6 @@ def train_dual_network(
     K_obs_train,
     X_pde_train,
     F_pde_train,
-    # X_obs_test,
-    # U_obs_test,
-    # X_obs_k_test,
-    # K_obs_test,
-    # X_pde_test,
-    # F_pde_test,
     adam_lr=1e-3,
     adam_iters=2000,
     lbfgs_iters=2000,
@@ -1853,60 +1847,10 @@ def train_dual_network(
     def closure():
         nonlocal lambda_u, lambda_k, X_obs_train, U_obs_train, X_obs_k_train, K_obs_train, X_pde_train, F_pde_train
 
- 
-        # # # --------------------------------------------------
-        # # # Resampling
-        # # # --------------------------------------------------
 
-        # if (
-        #     resample
-        #     and state["iter"]== resample_every
-        #     and state["iter"] < lbfgs_iters
-        # ):
-
-        #     # alpha_est = (
-        #     #     model_u.alpha
-        #     #     .detach()
-        #     #     .cpu()
-        #     #     .item()
-        #     # )
-
-
-        #     (
-        #         X_obs_train,
-        #         U_obs_train,
-        #         X_obs_k_train,
-        #         K_obs_train,
-        #         X_pde_train,
-        #         F_pde_train,
-        #         _,
-        #         _,
-        #         _,
-        #     ) = generate_dataset_inf(
-        #         alpha_true=pde_alpha,
-        #         alpha_sampling=0.5,
-        #         beta=pde_beta,
-        #         epsilon=epsilon,
-        #         domain=domain,
-        #         n_obs_u=X_obs_train.shape[0],
-        #         n_obs_k=X_obs_k_train.shape[0],
-        #         n_pde=n_pde,
-        #         sampling=sampling,
-        #         sampling_scale=sampling_scale,
-        #         device=device,
-        #         dtype=X_pde_train.dtype,
-        #         plot=False,
-        #         seed=seed + adam_iters + state["iter"],
-        #     )
-
- 
-
- 
         optimizer_lbfgs.zero_grad()
         lambda_reg = 0
 
-        #if lambda_pde_scheduler:
-        #    lambda_pde = get_pde_weight(state["iter"] + adam_iters)
 
         total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(
             model_u, model_k,
@@ -1915,25 +1859,15 @@ def train_dual_network(
             criterion, lambda_u, lambda_k, lambda_pde,
             parameters, regularization, lambda_reg,
         )
-        # total_test, loss_u_test, loss_k_test, loss_pde_test, total_no_reg_test = compute_losses(
-        #     model_u, model_k,
-        #     X_obs_test, U_obs_test, X_obs_k_test, K_obs_test,
-        #     X_pde_test, F_pde_test,
-        #     criterion, lambda_u, lambda_k, lambda_pde,
-        #     parameters, regularization, lambda_reg,
-        # )
+  
 
         total.backward()
 
-        #if iters_done == 0:
-        #    V = np.array([loss_u.item(), loss_k.item(), loss_pde.item()])
-        #    ratio = V.max() / (V.min() + 1e-12)
-        #else:
+ 
         ratio = ratio_calculation(history, update_every)
 
 
         if adaptive_weights and state["iter"] % update_every == 0 and state["iter"] > 0:
-            #print(f"Epoch {epoch}: updating loss weights (lambda_u, lambda_k)")
             lambda_u, lambda_k = update_loss_weights(
                 history, state["iter"] + adam_iters, lambda_u, lambda_k, lambda_pde,
                 loss_u, loss_k, update_every, alpha,
@@ -1944,7 +1878,6 @@ def train_dual_network(
         state["loss_k"] = loss_k.detach()
         state["loss_pde"] = loss_pde.detach()
 
-        #lbfgs_done += 1
         state["iter"] += 1
 
         if verbose and state["iter"] % print_every == 0:
@@ -1979,12 +1912,10 @@ def train_dual_network(
             )
             save_history_entry(
                 history, state["iter"] + adam_iters, total, loss_u, loss_k, loss_pde, ratio,
-                # total_test, total_no_reg, total_no_reg_test,
                 total_no_reg, 
                 err_u=err_u, err_k=err_k,
             )
 
-        #state["iter"] += 1
 
         return total
 
