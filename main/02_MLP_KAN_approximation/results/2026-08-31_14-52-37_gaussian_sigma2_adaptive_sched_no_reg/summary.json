@@ -1,0 +1,94 @@
+{
+  "config": {
+    "adam_lr": 0.001,
+    "adam_iters": 2000,
+    "lbfgs_iters": 2000,
+    "print_every": 100,
+    "save_every": 100,
+    "lambda_pde_scheduler": true,
+    "adaptive_weights": true,
+    "alpha": 7,
+    "update_every": 100,
+    "regularization": false,
+    "sampling": "gaussian",
+    "sigma": 2.0,
+    "exp_scale": 1.0,
+    "n_obs_u": 100,
+    "n_obs_k": 100,
+    "n_pde": 1000,
+    "seed": 2,
+    "pde_alpha": 0.5,
+    "pde_beta": 5,
+    "epsilon": 1
+  },
+  "n_logged_steps": 41,
+  "final": {
+    "total": 0.0016357805579900742,
+    "u": 2.2582726160180755e-05,
+    "k": 3.259626055296394e-06,
+    "pde": 0.0015534649137407541,
+    "lambda_u": 1.0,
+    "lambda_k": 18.325070934542918,
+    "lambda_pde": 1.0,
+    "ratio": 14.750101335284285,
+    "error_u": 0.1678316605909226,
+    "error_k": 0.0062595330985827915
+  },
+  "model_u": {
+    "class_name": "KAN",
+    "total_params": 13250,
+    "trainable_params": 13250,
+    "layers": [
+      {
+        "name": "layers.0.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.1.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.2.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.3.base_activation",
+        "type": "SiLU"
+      }
+    ],
+    "architecture": "KAN(\n  (layers): ModuleList(\n    (0-3): 4 x KANLinear(\n      (base_activation): SiLU()\n    )\n  )\n)"
+  },
+  "model_k": {
+    "class_name": "KAN",
+    "total_params": 13250,
+    "trainable_params": 13250,
+    "layers": [
+      {
+        "name": "layers.0.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.1.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.2.base_activation",
+        "type": "SiLU"
+      },
+      {
+        "name": "layers.3.base_activation",
+        "type": "SiLU"
+      }
+    ],
+    "architecture": "KAN(\n  (layers): ModuleList(\n    (0-3): 4 x KANLinear(\n      (base_activation): SiLU()\n    )\n  )\n)"
+  },
+  "sampling": {
+    "type": "gaussian",
+    "sigma": 2.0,
+    "exp_scale": 1.0,
+    "n_obs_u": 100,
+    "n_obs_k": 100,
+    "n_pde": 1000,
+    "seed": 2
+  }
+}

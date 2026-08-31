@@ -213,7 +213,7 @@ def generate_dataset_inf(
             vmin=-1,
             vmax=1,
             s=20,
-            edgecolors="k",
+            edgecolors="#7A7A7A",
             linewidths=0.25,
         )
 
@@ -240,7 +240,7 @@ def generate_dataset_inf(
             c=k_obs,
             cmap="viridis",
             s=20,
-            edgecolors="k",
+            edgecolors="#7A7A7A",
             linewidths=0.25,
         )
 
@@ -263,6 +263,7 @@ def generate_dataset_inf(
         X,
         Y,
         U,
+        K
     )
 
 
@@ -702,165 +703,1310 @@ def generate_dataset_inf(
 #     )
  
 
+# 
+
+
+from datetime import datetime
+
+
 def evaluate_model_inf(
     model_u,
     model_k,
     analytical_solution,
     coefficient,
-    xmin=-5,
-    xmax=5,
-    n_grid=300,
+    X_obs=None,
+    X_obs_k=None,
+    sampling="uniform",
+
+    # ----------------------------------------------------------
+    # Training domain
+    # ----------------------------------------------------------
+
+    train_xmin=-5.0,
+    train_xmax=5.0,
+    train_ymin=-5.0,
+    train_ymax=5.0,
+
+    # ----------------------------------------------------------
+    # Evaluation domain
+    # ----------------------------------------------------------
+
+    eval_xmin=-8.0,
+    eval_xmax=8.0,
+    eval_ymin=-8.0,
+    eval_ymax=8.0,
+
+    n_grid=400,
+
     alpha=0.5,
     beta=5.0,
     epsilon=1.0,
+
     device="cpu",
+
     plot=False,
     verbose=False,
+
     save_results=False,
     results_dir="results",
+
+    save_plot=False,
+    plot_path=None,
 ):
+
     """
-    Evaluate trained models and compare them with the exact solution.
+    Evaluate spatial generalization outside the training domain.
+
+    Figure structure:
+
+                    Prediction          Absolute error
+                ┌──────────────────┬──────────────────┐
+            u   │      u_hat       │    |u-u_hat|     │
+                ├──────────────────┼──────────────────┤
+            k   │      k_hat       │    |k-k_hat|     │
+                ├──────────────────┴──────────────────┤
+                │        Relative L2 errors            │
+                │  Inside | Outside | Global          │
+                └─────────────────────────────────────┘
+
+    The training-domain rectangle is overlaid on the
+    prediction and error maps.
+
+    Errors are reported globally, inside the training
+    domain, and outside the training domain.
+
+    Returns
+    -------
+    dict
+        Dictionary containing relative L2 errors,
+        predictions, pointwise errors, and evaluation grid.
     """
 
+    # ============================================================
     # Evaluation grid
-    x = np.linspace(xmin, xmax, n_grid)
-    y = np.linspace(xmin, xmax, n_grid)
+    # ============================================================
+
+    x = np.linspace(
+        eval_xmin,
+        eval_xmax,
+        n_grid,
+    )
+
+    y = np.linspace(
+        eval_ymin,
+        eval_ymax,
+        n_grid,
+    )
 
     X, Y = np.meshgrid(x, y)
 
-    U = analytical_solution(X, Y, alpha, beta)
-    K_exact = coefficient(X, Y, epsilon)
+    # ============================================================
+    # Exact solutions on the larger evaluation domain
+    # ============================================================
+
+    U = analytical_solution(
+        X,
+        Y,
+        alpha,
+        beta,
+    )
+
+    K_exact = coefficient(
+        X,
+        Y,
+        epsilon,
+    )
+
+    # ============================================================
+    # Test points
+    # ============================================================
 
     X_test = torch.tensor(
-        np.column_stack((X.ravel(), Y.ravel())),
+        np.column_stack(
+            (
+                X.ravel(),
+                Y.ravel(),
+            )
+        ),
         dtype=torch.float32,
         device=device,
     )
 
+    # ============================================================
     # Predictions
+    # ============================================================
+
     model_u.eval()
     model_k.eval()
 
     with torch.no_grad():
-        U_pred = model_u(X_test).cpu().numpy().reshape(U.shape)
-        K_pred = model_k(X_test).cpu().numpy().reshape(U.shape)
 
-    # Errors
-    err_u = np.linalg.norm(U_pred - U) / np.linalg.norm(U)
-    err_k = np.linalg.norm(K_pred - K_exact) / np.linalg.norm(K_exact)
+        U_pred = (
+            model_u(X_test)
+            .cpu()
+            .numpy()
+            .reshape(U.shape)
+        )
+
+        K_pred = (
+            model_k(X_test)
+            .cpu()
+            .numpy()
+            .reshape(K_exact.shape)
+        )
+
+    # ============================================================
+    # Pointwise errors
+    # ============================================================
+
+    error_u = np.abs(
+        U_pred - U
+    )
+
+    error_k = np.abs(
+        K_pred - K_exact
+    )
+
+    # ============================================================
+    # Global relative L2 errors
+    # ============================================================
+
+    err_u_global = (
+        np.linalg.norm(
+            U_pred - U
+        )
+        /
+        (
+            np.linalg.norm(U)
+            + 1e-14
+        )
+    )
+
+    err_k_global = (
+        np.linalg.norm(
+            K_pred - K_exact
+        )
+        /
+        (
+            np.linalg.norm(K_exact)
+            + 1e-14
+        )
+    )
+
+    # ============================================================
+    # Outside-training-domain mask
+    #
+    # True = points outside
+    # [train_xmin, train_xmax] x
+    # [train_ymin, train_ymax]
+    # ============================================================
+
+    outside_mask = (
+        (X < train_xmin)
+        |
+        (X > train_xmax)
+        |
+        (Y < train_ymin)
+        |
+        (Y > train_ymax)
+    )
+
+    # ============================================================
+    # Outside-domain errors
+    # ============================================================
+
+    U_outside = U[outside_mask]
+    U_pred_outside = U_pred[outside_mask]
+
+    K_outside = K_exact[outside_mask]
+    K_pred_outside = K_pred[outside_mask]
+
+    err_u_outside = (
+        np.linalg.norm(
+            U_pred_outside - U_outside
+        )
+        /
+        (
+            np.linalg.norm(U_outside)
+            + 1e-14
+        )
+    )
+
+    err_k_outside = (
+        np.linalg.norm(
+            K_pred_outside - K_outside
+        )
+        /
+        (
+            np.linalg.norm(K_outside)
+            + 1e-14
+        )
+    )
+
+    # ============================================================
+    # Inside-domain errors
+    # ============================================================
+
+    inside_mask = ~outside_mask
+
+    err_u_inside = (
+        np.linalg.norm(
+            U_pred[inside_mask]
+            -
+            U[inside_mask]
+        )
+        /
+        (
+            np.linalg.norm(
+                U[inside_mask]
+            )
+            + 1e-14
+        )
+    )
+
+    err_k_inside = (
+        np.linalg.norm(
+            K_pred[inside_mask]
+            -
+            K_exact[inside_mask]
+        )
+        /
+        (
+            np.linalg.norm(
+                K_exact[inside_mask]
+            )
+            + 1e-14
+        )
+    )
+
+    # ============================================================
+    # Verbose
+    # ============================================================
 
     if verbose:
-        print(f"Relative L2 error (u): {err_u:.3e}")
-        print(f"Relative L2 error (k): {err_k:.3e}")
 
-    error_u = np.abs(U_pred - U)
-    error_k = np.abs(K_pred - K_exact)
+        print("\n========================================")
+        print("Spatial generalization")
+        print("========================================")
+
+        print(
+            f"Training domain : "
+            f"[{train_xmin}, {train_xmax}] × "
+            f"[{train_ymin}, {train_ymax}]"
+        )
+
+        print(
+            f"Evaluation domain : "
+            f"[{eval_xmin}, {eval_xmax}] × "
+            f"[{eval_ymin}, {eval_ymax}]"
+        )
+
+        print("\nGlobal relative L2 error")
+
+        print(
+            f"u : {err_u_global:.3e}"
+        )
+
+        print(
+            f"k : {err_k_global:.3e}"
+        )
+
+        print("\nInside training domain")
+
+        print(
+            f"u : {err_u_inside:.3e}"
+        )
+
+        print(
+            f"k : {err_k_inside:.3e}"
+        )
+
+        print("\nOutside training domain")
+
+        print(
+            f"u : {err_u_outside:.3e}"
+        )
+
+        print(
+            f"k : {err_k_outside:.3e}"
+        )
+
+    # ============================================================
+    # Convert sampling points
+    # ============================================================
+
+    def to_numpy(points):
+
+        if points is None:
+            return None
+
+        if torch.is_tensor(points):
+
+            return (
+                points
+                .detach()
+                .cpu()
+                .numpy()
+            )
+
+        return np.asarray(points)
+
+    X_obs_np = to_numpy(X_obs)
+    X_obs_k_np = to_numpy(X_obs_k)
+
+    # ============================================================
+    # Plot
+    # ============================================================
 
     if plot:
-        fig, ax = plt.subplots(
-            2, 3,
-            figsize=(9, 5),
-            constrained_layout=True,
+
+        # --------------------------------------------------------
+        # Figure and GridSpec
+        # --------------------------------------------------------
+
+        fig = plt.figure(
+            figsize=(3.5, 7.0)
         )
 
-        extent = [xmin, xmax, xmin, xmax]
+        gs = fig.add_gridspec(
+            3,
+            2,
 
-        # ---------------------- u ----------------------
-        ax[0,0].imshow(U, extent=extent, origin="lower",
-                    cmap="RdBu_r", vmin=-1, vmax=1)
-        ax[0,0].set_title("Exact $u$")
+            # Third row slightly shorter
+            height_ratios=[
+                1.0,
+                1.0,
+                0.5,
+            ],
 
-        ax[0,1].imshow(U_pred, extent=extent, origin="lower",
-                    cmap="RdBu_r", vmin=-1, vmax=1)
-        ax[0,1].set_title("Predicted $u$")
+            hspace=0.45,
+            wspace=0.30,
+        )
 
-        ax[0,2].imshow(error_u, extent=extent, origin="lower",
-                    cmap="viridis")
-        ax[0,2].set_title(r"$|u-\hat u|$")
+        # --------------------------------------------------------
+        # Spatial panels
+        # --------------------------------------------------------
 
-        # ---------------------- k ----------------------
-        ax[1,0].imshow(K_exact, extent=extent, origin="lower",
-                    cmap="GnBu", vmin=1, vmax=3)
-        ax[1,0].set_title("Exact $k$")
+        ax00 = fig.add_subplot(
+            gs[0, 0]
+        )
 
-        ax[1,1].imshow(K_pred, extent=extent, origin="lower",
-                    cmap="GnBu", vmin=1, vmax=3)
-        ax[1,1].set_title("Predicted $k$")
+        ax01 = fig.add_subplot(
+            gs[0, 1]
+        )
 
-        ax[1,2].imshow(error_k, extent=extent, origin="lower",
-                    cmap="viridis")
-        ax[1,2].set_title(r"$|k-\hat k|$")
+        ax10 = fig.add_subplot(
+            gs[1, 0]
+        )
 
-        # Remove ticks
-        for a in ax.flat:
-            a.set_xticks([])
-            a.set_yticks([])
+        ax11 = fig.add_subplot(
+            gs[1, 1]
+        )
 
+        # --------------------------------------------------------
+        # Third row spans both columns
+        # --------------------------------------------------------
+
+        ax_error = fig.add_subplot(
+            gs[2, :]
+        )
+
+        # ========================================================
+        # Common extent
+        # ========================================================
+
+        extent = [
+            eval_xmin,
+            eval_xmax,
+            eval_ymin,
+            eval_ymax,
+        ]
+
+        # ========================================================
+        # Fixed solution scales
+        # ========================================================
+
+        u_vmin = -1
+        u_vmax = 1
+
+        k_vmin = 1
+        k_vmax = 3
+
+        # ========================================================
+        # Error scales
+        # ========================================================
+
+        err_u_max = np.max(
+            error_u
+        )
+
+        err_k_max = np.max(
+            error_k
+        )
+
+        if err_u_max == 0:
+            err_u_max = 1e-12
+
+        if err_k_max == 0:
+            err_k_max = 1e-12
+
+        # ========================================================
+        # ROW 1 — u prediction
+        # ========================================================
+
+        im_u = ax00.imshow(
+            U_pred,
+            extent=extent,
+            origin="lower",
+            cmap="RdBu_r",
+            vmin=u_vmin,
+            vmax=u_vmax,
+            aspect="equal",
+        )
+
+        # --------------------------------------------------------
+        # u sampling
+        # --------------------------------------------------------
+
+        if X_obs_np is not None:
+
+            ax00.scatter(
+                X_obs_np[:, 0],
+                X_obs_np[:, 1],
+
+                facecolors="none",
+                edgecolors="#7A7A7A",
+
+                s=20,
+                alpha=0.7,
+                linewidths=0.5,
+            )
+
+        # --------------------------------------------------------
+        # Training-domain rectangle
+        # --------------------------------------------------------
+
+        rect_u = plt.Rectangle(
+            (
+                train_xmin,
+                train_ymin,
+            ),
+
+            train_xmax - train_xmin,
+            train_ymax - train_ymin,
+
+            fill=False,
+            edgecolor="#7A7A7A",
+            linewidth=1.0,
+            linestyle="-",
+        )
+
+        ax00.add_patch(
+            rect_u
+        )
+
+        # ========================================================
+        # ROW 1 — u error
+        # ========================================================
+
+        im_err_u = ax01.imshow(
+            error_u,
+            extent=extent,
+            origin="lower",
+            cmap="viridis",
+            vmin=0,
+            vmax=err_u_max,
+            aspect="equal",
+        )
+
+        # --------------------------------------------------------
+        # u sampling
+        # --------------------------------------------------------
+
+        if X_obs_np is not None:
+
+            ax01.scatter(
+                X_obs_np[:, 0],
+                X_obs_np[:, 1],
+
+                facecolors="none",
+                edgecolors="#7A7A7A",
+
+                s=20,
+                alpha=0.7,
+                linewidths=0.5,
+            )
+
+        # --------------------------------------------------------
+        # Training-domain rectangle
+        # --------------------------------------------------------
+
+        rect_u_err = plt.Rectangle(
+            (
+                train_xmin,
+                train_ymin,
+            ),
+
+            train_xmax - train_xmin,
+            train_ymax - train_ymin,
+
+            fill=False,
+            edgecolor="#7A7A7A",
+            linewidth=1.0,
+            linestyle="-",
+        )
+
+        ax01.add_patch(
+            rect_u_err
+        )
+
+        # ========================================================
+        # ROW 2 — k prediction
+        # ========================================================
+
+        im_k = ax10.imshow(
+            K_pred,
+            extent=extent,
+            origin="lower",
+            cmap="GnBu",
+            vmin=k_vmin,
+            vmax=k_vmax,
+            aspect="equal",
+        )
+
+        # --------------------------------------------------------
+        # k sampling
+        # --------------------------------------------------------
+
+        if X_obs_k_np is not None:
+
+            ax10.scatter(
+                X_obs_k_np[:, 0],
+                X_obs_k_np[:, 1],
+
+                facecolors="none",
+                edgecolors="#7A7A7A",
+
+                s=20,
+                alpha=0.7,
+                linewidths=0.5,
+            )
+
+        # --------------------------------------------------------
+        # Training-domain rectangle
+        # --------------------------------------------------------
+
+        rect_k = plt.Rectangle(
+            (
+                train_xmin,
+                train_ymin,
+            ),
+
+            train_xmax - train_xmin,
+            train_ymax - train_ymin,
+
+            fill=False,
+            edgecolor="#7A7A7A",
+            linewidth=1.0,
+            linestyle="-",
+        )
+
+        ax10.add_patch(
+            rect_k
+        )
+
+        # ========================================================
+        # ROW 2 — k error
+        # ========================================================
+
+        im_err_k = ax11.imshow(
+            error_k,
+            extent=extent,
+            origin="lower",
+            cmap="viridis",
+            vmin=0,
+            vmax=err_k_max,
+            aspect="equal",
+        )
+
+        # --------------------------------------------------------
+        # k sampling
+        # --------------------------------------------------------
+
+        if X_obs_k_np is not None:
+
+            ax11.scatter(
+                X_obs_k_np[:, 0],
+                X_obs_k_np[:, 1],
+
+                facecolors="none",
+                edgecolors="#7A7A7A",
+
+                s=20,
+                alpha=0.7,
+                linewidths=0.5,
+            )
+
+        # --------------------------------------------------------
+        # Training-domain rectangle
+        # --------------------------------------------------------
+
+        rect_k_err = plt.Rectangle(
+            (
+                train_xmin,
+                train_ymin,
+            ),
+
+            train_xmax - train_xmin,
+            train_ymax - train_ymin,
+
+            fill=False,
+            edgecolor="#7A7A7A",
+            linewidth=1.0,
+            linestyle="-",
+        )
+
+        ax11.add_patch(
+            rect_k_err
+        )
+
+        # ========================================================
+        # ROW 3 — Relative L2 errors
+        # ========================================================
+
+        regions = [
+            "Inside",
+            "Outside",
+        ]
+
+        u_errors = [
+            err_u_inside,
+            err_u_outside,
+        ]
+
+        k_errors = [
+            err_k_inside,
+            err_k_outside,
+        ]
+
+        x_pos = np.arange(
+            len(regions)
+        )
+
+        width = 0.40
+
+        u_color = "#2F6DAA"   # blue
+        k_color = "#7F7F7F"   # gray
+
+        # --------------------------------------------------------
+        # u bars
+        # --------------------------------------------------------
+
+        bars_u = ax_error.bar(
+            x_pos - width / 2,
+            u_errors,
+            color=u_color,
+            width=width,
+            label=r"$u$",
+        )
+
+        # --------------------------------------------------------
+        # k bars
+        # --------------------------------------------------------
+
+        bars_k = ax_error.bar(
+            x_pos + width / 2,
+            k_errors,
+            color=k_color,
+            width=width,
+            label=r"$k$",
+        )
+
+        # --------------------------------------------------------
+        # Logarithmic scale
+        # --------------------------------------------------------
+
+        ax_error.set_yscale(
+            "log"
+        )
+ 
+        ax_error.set_ylim(1e-4, 1e7)
+ 
+        # --------------------------------------------------------
+        # X axis
+        # --------------------------------------------------------
+
+        ax_error.set_xticks(
+            x_pos
+        )
+
+        ax_error.set_xticklabels(
+            regions,
+            fontsize=7,
+        )
+
+        # --------------------------------------------------------
+        # Legend
+        # --------------------------------------------------------
+
+        ax_error.legend(
+            fontsize=7,
+            frameon=False,
+            loc="upper right",
+        )
+
+        # --------------------------------------------------------
+        # Tick parameters
+        # --------------------------------------------------------
+
+        ax_error.tick_params(
+            axis="y",
+            labelsize=7,
+            length=3,
+        )
+
+        ax_error.tick_params(
+            axis="x",
+            labelsize=8,
+            length=3,
+        )
+
+        # --------------------------------------------------------
+        # Remove top and right borders
+        # --------------------------------------------------------
+
+        ax_error.spines["top"].set_visible(False)
+        ax_error.spines["right"].set_visible(False)
+
+        # --------------------------------------------------------
+        # Annotate u bars
+        # --------------------------------------------------------
+
+        for bar, value in zip(
+            bars_u,
+            u_errors,
+        ):
+            ax_error.text(
+                bar.get_x()
+                + bar.get_width() / 2,
+                value,
+                f"{value:.2e}",
+                ha="center",
+                va="bottom",
+                fontsize=6,
+                rotation=0,
+            )
+
+        # --------------------------------------------------------
+        # Annotate k bars
+        # --------------------------------------------------------
+
+        for bar, value in zip(
+            bars_k,
+            k_errors,
+        ):
+            ax_error.text(
+                bar.get_x()
+                + bar.get_width() / 2,
+                value,
+                f"{value:.2e}",
+                ha="center",
+                va="bottom",
+                fontsize=6,
+                rotation=0,
+            )
+
+        # ========================================================
+        # Spatial ticks
+        # ========================================================
+
+        ticks = [
+            eval_xmin,
+            train_xmin,
+            train_xmax,
+            eval_xmax,
+        ]
+
+        for a in [
+            ax00,
+            ax01,
+            ax10,
+            ax11,
+        ]:
+
+            a.set_xticks(
+                ticks
+            )
+
+            a.set_yticks(
+                ticks
+            )
+
+            a.tick_params(
+                labelsize=8,
+                length=3,
+            )
+
+
+
+            a.set_xlabel("")
+            a.set_ylabel("")
+
+        # ========================================================
+        # Sampling label
+        # ========================================================
+
+        fig.suptitle(
+            sampling.capitalize(),
+            fontsize=9,
+            y=0.92,
+        )
+
+        # ========================================================
         # Colorbars
-        cbar1 = fig.colorbar(
-            ax[0,1].images[0],
-            ax=ax[0,:2],
-            orientation="horizontal",
-            fraction=0.05,
-            pad=0.08,
-        )
-        cbar1.set_label(r"$u(x,y)$")
+        # ========================================================
 
-        cbar2 = fig.colorbar(
-            ax[1,1].images[0],
-            ax=ax[1,:2],
+        cbar_u = fig.colorbar(
+            im_u,
+            ax=ax00,
             orientation="horizontal",
-            fraction=0.05,
-            pad=0.08,
+            fraction=0.028,
+            pad=0.20,
+            aspect=30,
         )
-        cbar2.set_label(r"$k(x,y)$")
 
-        cbar3 = fig.colorbar(
-            ax[0,2].images[0],
-            ax=ax[:,2],
-            orientation="horizontal",
-            fraction=0.018,
-            pad=0.12,
+        cbar_u.set_label(
+            r"$u$",
+            fontsize=8,
         )
-        cbar3.set_label("Absolute error")
+
+        cbar_u.ax.tick_params(
+            labelsize=7
+        )
+
+        # --------------------------------------------------------
+        # u error colorbar
+        # --------------------------------------------------------
+
+        cbar_err_u = fig.colorbar(
+            im_err_u,
+            ax=ax01,
+            orientation="horizontal",
+            fraction=0.028,
+            pad=0.20,
+            aspect=30,
+        )
+
+        cbar_err_u.set_label(
+            r"$|u-\hat{u}|$",
+            fontsize=8,
+        )
+
+        cbar_err_u.ax.tick_params(
+            labelsize=7
+        )
+
+        # --------------------------------------------------------
+        # k colorbar
+        # --------------------------------------------------------
+
+        cbar_k = fig.colorbar(
+            im_k,
+            ax=ax10,
+            orientation="horizontal",
+            fraction=0.028,
+            pad=0.20,
+            aspect=30,
+        )
+
+        cbar_k.set_label(
+            r"$k$",
+            fontsize=8,
+        )
+
+        cbar_k.ax.tick_params(
+            labelsize=7
+        )
+
+        # --------------------------------------------------------
+        # k error colorbar
+        # --------------------------------------------------------
+
+        cbar_err_k = fig.colorbar(
+            im_err_k,
+            ax=ax11,
+            orientation="horizontal",
+            fraction=0.028,
+            pad=0.20,
+            aspect=30,
+        )
+
+        cbar_err_k.set_label(
+            r"$|k-\hat{k}|$",
+            fontsize=8,
+        )
+
+        cbar_err_k.ax.tick_params(
+            labelsize=7
+        )
+
+        # ========================================================
+        # Save plot
+        # ========================================================
+
+        if save_plot:
+
+            if plot_path is None:
+
+                os.makedirs(
+                    results_dir,
+                    exist_ok=True,
+                )
+
+                timestamp = (
+                    datetime.now()
+                    .strftime(
+                        "%Y%m%d_%H%M%S"
+                    )
+                )
+
+                plot_path = os.path.join(
+                    results_dir,
+
+                    f"infinite_prediction_"
+                    f"{sampling}_"
+                    f"{timestamp}.png",
+                )
+
+            else:
+
+                directory = os.path.dirname(
+                    plot_path
+                )
+
+                if directory:
+
+                    os.makedirs(
+                        directory,
+                        exist_ok=True,
+                    )
+
+            fig.savefig(
+                plot_path,
+                dpi=300,
+                bbox_inches="tight",
+            )
+
+            if verbose:
+
+                print(
+                    f"Prediction plot saved to: "
+                    f"{plot_path}"
+                )
 
         plt.show()
 
-    # --------------------------------------------------
-    # Save results
-    # --------------------------------------------------
+    # ============================================================
+    # Save numerical results
+    # ============================================================
+
     if save_results:
 
-        os.makedirs(results_dir, exist_ok=True)
-
-        mean_error = 0.5 * (err_u + err_k)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        filename = (
-            f"infinite_problem_results_{timestamp}.txt"
+        os.makedirs(
+            results_dir,
+            exist_ok=True,
         )
 
-        filepath = os.path.join(results_dir, filename)
+        mean_global_error = 0.5 * (
+            err_u_global
+            +
+            err_k_global
+        )
 
-        with open(filepath, "w") as f:
+        mean_outside_error = 0.5 * (
+            err_u_outside
+            +
+            err_k_outside
+        )
 
-            f.write("Infinite-domain inverse problem\n")
-            f.write("=" * 40 + "\n\n")
+        timestamp = (
+            datetime.now()
+            .strftime(
+                "%Y%m%d_%H%M%S"
+            )
+        )
+
+        filename = (
+            f"infinite_problem_results_"
+            f"{sampling}_"
+            f"{timestamp}.txt"
+        )
+
+        filepath = os.path.join(
+            results_dir,
+            filename,
+        )
+
+        with open(
+            filepath,
+            "w",
+        ) as f:
 
             f.write(
-                f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                "Infinite-domain inverse problem\n"
             )
 
-            f.write(f"Relative L2 error (u): {err_u:.8e}\n")
-            f.write(f"Relative L2 error (k): {err_k:.8e}\n")
-            f.write(f"Mean error         : {mean_error:.8e}\n")
+            f.write(
+                "=" * 50
+                + "\n\n"
+            )
+
+            f.write(
+                f"Date: "
+                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            )
+
+            f.write(
+                f"Sampling: {sampling}\n\n"
+            )
+
+            # ----------------------------------------------------
+            # Training domain
+            # ----------------------------------------------------
+
+            f.write(
+                "Training domain\n"
+            )
+
+            f.write(
+                f"x: [{train_xmin}, {train_xmax}]\n"
+            )
+
+            f.write(
+                f"y: [{train_ymin}, {train_ymax}]\n\n"
+            )
+
+            # ----------------------------------------------------
+            # Evaluation domain
+            # ----------------------------------------------------
+
+            f.write(
+                "Evaluation domain\n"
+            )
+
+            f.write(
+                f"x: [{eval_xmin}, {eval_xmax}]\n"
+            )
+
+            f.write(
+                f"y: [{eval_ymin}, {eval_ymax}]\n\n"
+            )
+
+            # ----------------------------------------------------
+            # Global errors
+            # ----------------------------------------------------
+
+            f.write(
+                "Global relative L2 errors\n"
+            )
+
+            f.write(
+                f"u: {err_u_global:.8e}\n"
+            )
+
+            f.write(
+                f"k: {err_k_global:.8e}\n"
+            )
+
+            f.write(
+                f"Mean: {mean_global_error:.8e}\n\n"
+            )
+
+            # ----------------------------------------------------
+            # Inside errors
+            # ----------------------------------------------------
+
+            f.write(
+                "Inside training domain\n"
+            )
+
+            f.write(
+                f"u: {err_u_inside:.8e}\n"
+            )
+
+            f.write(
+                f"k: {err_k_inside:.8e}\n\n"
+            )
+
+            # ----------------------------------------------------
+            # Outside errors
+            # ----------------------------------------------------
+
+            f.write(
+                "Outside training domain\n"
+            )
+
+            f.write(
+                f"u: {err_u_outside:.8e}\n"
+            )
+
+            f.write(
+                f"k: {err_k_outside:.8e}\n"
+            )
+
+            f.write(
+                f"Mean: {mean_outside_error:.8e}\n"
+            )
 
         if verbose:
-            print(f"Results saved to: {filepath}")
+
+            print(
+                f"Results saved to: "
+                f"{filepath}"
+            )
+
+    # ============================================================
+    # Return
+    # ============================================================
+
+    return {
+
+        "err_u_global": err_u_global,
+        "err_k_global": err_k_global,
+
+        "err_u_inside": err_u_inside,
+        "err_k_inside": err_k_inside,
+
+        "err_u_outside": err_u_outside,
+        "err_k_outside": err_k_outside,
+
+        "U_pred": U_pred,
+        "K_pred": K_pred,
+
+        "error_u": error_u,
+        "error_k": error_k,
+
+        "X": X,
+        "Y": Y,
+
+        "outside_mask": outside_mask,
+    }
+
+
+def compute_training_errors(
+    model_u,
+    model_k,
+    X_obs,
+    X_obs_k,
+    analytical_solution,
+    coefficient,
+    alpha=0.5,
+    beta=5.0,
+    epsilon=1.0,
+    device="gpu",
+):
+    """
+    Compute relative L2 errors of u and k at the training points.
+
+    Returns
+    -------
+    err_u : float
+        Relative L2 error for u.
+    err_k : float
+        Relative L2 error for k.
+    """
+
+    # ------------------------------------------------------------
+    # Convert points to tensors
+    # ------------------------------------------------------------
+
+    if not torch.is_tensor(X_obs):
+        X_obs = torch.tensor(
+            X_obs,
+            dtype=torch.float32,
+            device=device,
+        )
+    else:
+        X_obs = X_obs.to(device=device, dtype=torch.float32)
+
+    if not torch.is_tensor(X_obs_k):
+        X_obs_k = torch.tensor(
+            X_obs_k,
+            dtype=torch.float32,
+            device=device,
+        )
+    else:
+        X_obs_k = X_obs_k.to(device=device, dtype=torch.float32)
+
+    # ------------------------------------------------------------
+    # Exact values at training points
+    # ------------------------------------------------------------
+
+    X_u_np = X_obs.detach().cpu().numpy()
+
+    u_exact = analytical_solution(
+        X_u_np[:, 0],
+        X_u_np[:, 1],
+        alpha,
+        beta,
+    )
+
+    X_k_np = X_obs_k.detach().cpu().numpy()
+
+    k_exact = coefficient(
+        X_k_np[:, 0],
+        X_k_np[:, 1],
+        epsilon,
+    )
+
+    # Convert exact values to tensors
+    u_exact = torch.tensor(
+        u_exact,
+        dtype=torch.float32,
+        device=device,
+    ).reshape(-1, 1)
+
+    k_exact = torch.tensor(
+        k_exact,
+        dtype=torch.float32,
+        device=device,
+    ).reshape(-1, 1)
+
+    # ------------------------------------------------------------
+    # Predictions
+    # ------------------------------------------------------------
+
+    was_training_u = model_u.training
+    was_training_k = model_k.training
+
+    model_u.eval()
+    model_k.eval()
+
+    with torch.no_grad():
+
+        u_pred = model_u(X_obs)
+
+        k_pred = model_k(X_obs_k)
+
+    # Restore original training state
+    if was_training_u:
+        model_u.train()
+
+    if was_training_k:
+        model_k.train()
+
+    # ------------------------------------------------------------
+    # Relative L2 errors
+    # ------------------------------------------------------------
+
+    err_u = (
+        torch.linalg.norm(u_pred - u_exact)
+        / (torch.linalg.norm(u_exact) + 1e-14)
+    ).item()
+
+    err_k = (
+        torch.linalg.norm(k_pred - k_exact)
+        / (torch.linalg.norm(k_exact) + 1e-14)
+    ).item()
 
     return err_u, err_k
-
-
-
