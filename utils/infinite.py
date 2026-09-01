@@ -54,111 +54,363 @@ def generate_dataset_inf(
     alpha=0.5,
     beta=5.0,
     epsilon=1.0,
-    domain=(-5.0, 5.0),
+
+    # ============================================================
+    # Training domain
+    # ============================================================
+    train_domain=(-5.0, 5.0, -5.0, 5.0),
+
+    # ============================================================
+    # Evaluation / visualization domain
+    # ============================================================
+    eval_domain=(-8.0, 8.0, -8.0, 8.0),
+
     n_obs_u=100,
     n_obs_k=100,
     n_pde=10_000,
     n_grid=300,
-    sampling="uniform",   # "uniform", "gaussian", "gaussian_exponential"
+
+    sampling="uniform",
+    # "uniform"
+    # "gaussian"
+    # "gaussian_exponential"
+
     sigma=2.5,
     exp_scale=1.0,
+
     device="cpu",
     dtype=torch.float32,
+
     plot=False,
-    seed=1
+    seed=1,
 ):
+    """
+    Generate data for the infinite-domain inverse problem.
+
+    Parameters
+    ----------
+    alpha : float
+        Parameter of the analytical solution.
+
+    beta : float
+        Frequency parameter of the analytical solution.
+
+    epsilon : float
+        Parameter of the coefficient function.
+
+    train_domain : tuple
+        Training rectangle:
+        (train_xmin, train_xmax, train_ymin, train_ymax)
+
+    eval_domain : tuple
+        Finite visualization/evaluation rectangle:
+        (eval_xmin, eval_xmax, eval_ymin, eval_ymax)
+
+    sampling : str
+        Sampling strategy:
+
+        "uniform"
+            Uniform sampling inside the training rectangle.
+
+        "gaussian"
+            Untruncated Gaussian sampling in both x and y.
+
+        "gaussian_exponential"
+            Untruncated Gaussian sampling in x and
+            untruncated symmetric exponential/Laplace
+            sampling in y.
+
+    sigma : float
+        Standard deviation of Gaussian sampling.
+
+    exp_scale : float
+        Scale parameter of the Laplace distribution.
+
+    Returns
+    -------
+    X_obs : torch.Tensor
+        Observation coordinates for u.
+
+    U_obs : torch.Tensor
+        Exact observations of u.
+
+    X_obs_k : torch.Tensor
+        Observation coordinates for k.
+
+    K_obs : torch.Tensor
+        Exact observations of k.
+
+    X_pde : torch.Tensor
+        PDE collocation points.
+
+    F_pde : torch.Tensor
+        PDE source values.
+
+    X, Y : numpy.ndarray
+        Evaluation grid.
+
+    U : numpy.ndarray
+        Exact solution on evaluation grid.
+
+    K : numpy.ndarray
+        Exact coefficient on evaluation grid.
+    """
+
+    # ============================================================
+    # Random number generator
+    # ============================================================
     rng = np.random.default_rng(seed)
 
-    xmin, xmax = domain
+    # ============================================================
+    # Training domain
+    # ============================================================
+    (
+        train_xmin,
+        train_xmax,
+        train_ymin,
+        train_ymax,
+    ) = train_domain
 
-    # --------------------------------------------------
+    # ============================================================
+    # Evaluation domain
+    # ============================================================
+    (
+        eval_xmin,
+        eval_xmax,
+        eval_ymin,
+        eval_ymax,
+    ) = eval_domain
+
+    # ============================================================
     # Sampling functions
-    # --------------------------------------------------
-    def truncated_gaussian(n):
-        x = rng.normal(0.0, sigma, 5 * n)
-        x = x[(x >= xmin) & (x <= xmax)]
-        while len(x) < n:
-            extra = rng.normal(0.0, sigma, 2 * n)
-            extra = extra[(extra >= xmin) & (extra <= xmax)]
-            x = np.concatenate((x, extra))
-        return x[:n]
+    # ============================================================
 
-    def truncated_exponential(n):
-        # Symmetric exponential (Laplace)
-        y = rng.laplace(0.0, exp_scale, 3 * n)
-        y = y[(y >= xmin) & (y <= xmax)]
-        while len(y) < n:
-            extra = rng.laplace(0.0, exp_scale, 2 * n)
-            extra = extra[(extra >= xmin) & (extra <=xmax)]
-            y = np.concatenate((y, extra))
-        return y[:n]
+    def gaussian_sampling(n):
+        """
+        Untruncated Gaussian sampling.
+
+        Samples are allowed to lie anywhere in (-inf, inf).
+        """
+        return rng.normal(
+            loc=0.0,
+            scale=sigma,
+            size=n,
+        )
+
+    # ------------------------------------------------------------
+    # Symmetric exponential / Laplace sampling
+    # ------------------------------------------------------------
+
+    def exponential_sampling(n):
+        """
+        Untruncated symmetric exponential (Laplace) sampling.
+
+        Samples are allowed to lie anywhere in (-inf, inf).
+        """
+        return rng.laplace(
+            loc=0.0,
+            scale=exp_scale,
+            size=n,
+        )
+
+    # ============================================================
+    # General sampling function
+    # ============================================================
 
     def sample_points(n):
+
+        # --------------------------------------------------------
+        # Uniform sampling
+        # --------------------------------------------------------
         if sampling == "uniform":
-            x = rng.uniform(xmin, xmax, n)
-            y = rng.uniform(xmin, xmax, n)
 
+            # Uniform points ONLY inside the training rectangle
+            x = rng.uniform(
+                train_xmin,
+                train_xmax,
+                n,
+            )
+
+            y = rng.uniform(
+                train_ymin,
+                train_ymax,
+                n,
+            )
+
+        # --------------------------------------------------------
+        # Gaussian sampling
+        # --------------------------------------------------------
         elif sampling == "gaussian":
-            x = truncated_gaussian(n)
-            y = truncated_gaussian(n)
 
+            # UNTRUNCATED
+            x = gaussian_sampling(n)
+            y = gaussian_sampling(n)
+
+        # --------------------------------------------------------
+        # Gaussian-exponential sampling
+        # --------------------------------------------------------
         elif sampling == "gaussian_exponential":
-            x = truncated_gaussian(n)
-            y = truncated_exponential(n)
+
+            # UNTRUNCATED
+            x = gaussian_sampling(n)
+            y = exponential_sampling(n)
 
         else:
-            raise ValueError(f"Unknown sampling '{sampling}'")
+
+            raise ValueError(
+                f"Unknown sampling '{sampling}'. "
+                "Choose from: "
+                "'uniform', "
+                "'gaussian', "
+                "'gaussian_exponential'."
+            )
 
         return x, y
 
-    # --------------------------------------------------
+    # ============================================================
     # Symbolic variables
-    # --------------------------------------------------
+    # ============================================================
+
     xs, ys = sp.symbols("x y")
-    alpha_s, beta_s = sp.symbols("alpha beta", positive=True)
-    eps_s = sp.symbols("epsilon", positive=True)
 
-    # --------------------------------------------------
+    alpha_s, beta_s = sp.symbols(
+        "alpha beta",
+        positive=True,
+    )
+
+    eps_s = sp.symbols(
+        "epsilon",
+        positive=True,
+    )
+
+    # ============================================================
     # Observation points
-    # --------------------------------------------------
-    x_obs, y_obs = sample_points(n_obs_u)
+    # ============================================================
 
-    # Keep k observations uniform
-    #x_obs_k = np.random.uniform(xmin, xmax, n_obs_k)
-    #y_obs_k = np.random.uniform(xmin, xmax, n_obs_k)
-    x_obs_k, y_obs_k = sample_points(n_obs_k)
+    x_obs, y_obs = sample_points(
+        n_obs_u
+    )
 
-    u_obs = analytical_solution_inf(x_obs, y_obs, alpha, beta)
-    k_obs = coefficient_inf(x_obs_k, y_obs_k, epsilon)
+    # ------------------------------------------------------------
+    # k observations
+    # ------------------------------------------------------------
 
-    # --------------------------------------------------
+    x_obs_k, y_obs_k = sample_points(
+        n_obs_k
+    )
+
+    # ============================================================
+    # Exact observations
+    # ============================================================
+
+    u_obs = analytical_solution_inf(
+        x_obs,
+        y_obs,
+        alpha,
+        beta,
+    )
+
+    k_obs = coefficient_inf(
+        x_obs_k,
+        y_obs_k,
+        epsilon,
+    )
+
+    # ============================================================
     # PDE collocation points
-    # --------------------------------------------------
-    x_pde, y_pde = sample_points(n_pde)
+    # ============================================================
 
-    f_pde = source_term_inf(xs, ys, alpha_s, beta_s, eps_s)
-    f_values = f_pde(x_pde, y_pde, alpha, beta, epsilon)
+    x_pde, y_pde = sample_points(
+        n_pde
+    )
 
-    # --------------------------------------------------
-    # Visualization grid
-    # --------------------------------------------------
-    x = np.linspace(xmin, xmax, n_grid)
-    y = np.linspace(xmin, xmax, n_grid)
-    X, Y = np.meshgrid(x, y)
-    U = analytical_solution_inf(X, Y, alpha, beta)
-    K = coefficient_inf(X, Y, epsilon)
-    # --------------------------------------------------
+    # ============================================================
+    # PDE source term
+    # ============================================================
+
+    f_pde = source_term_inf(
+        xs,
+        ys,
+        alpha_s,
+        beta_s,
+        eps_s,
+    )
+
+    f_values = f_pde(
+        x_pde,
+        y_pde,
+        alpha,
+        beta,
+        epsilon,
+    )
+
+    # ============================================================
+    # Evaluation / visualization grid
+    #
+    # IMPORTANT:
+    # This grid is independent of the sampling distribution.
+    #
+    # It is simply a finite window used to visualize the
+    # infinite-domain solution.
+    # ============================================================
+
+    x = np.linspace(
+        eval_xmin,
+        eval_xmax,
+        n_grid,
+    )
+
+    y = np.linspace(
+        eval_ymin,
+        eval_ymax,
+        n_grid,
+    )
+
+    X, Y = np.meshgrid(
+        x,
+        y,
+    )
+
+    # ============================================================
+    # Exact solution on evaluation domain
+    # ============================================================
+
+    U = analytical_solution_inf(
+        X,
+        Y,
+        alpha,
+        beta,
+    )
+
+    K = coefficient_inf(
+        X,
+        Y,
+        epsilon,
+    )
+
+    # ============================================================
     # Torch tensors
-    # --------------------------------------------------
+    # ============================================================
+
     X_obs = torch.tensor(
-        np.column_stack((x_obs, y_obs)),
+        np.column_stack(
+            (
+                x_obs,
+                y_obs,
+            )
+        ),
         dtype=dtype,
         device=device,
         requires_grad=True,
     )
 
     X_obs_k = torch.tensor(
-        np.column_stack((x_obs_k, y_obs_k)),
+        np.column_stack(
+            (
+                x_obs_k,
+                y_obs_k,
+            )
+        ),
         dtype=dtype,
         device=device,
         requires_grad=True,
@@ -177,7 +429,12 @@ def generate_dataset_inf(
     )
 
     X_pde = torch.tensor(
-        np.column_stack((x_pde, y_pde)),
+        np.column_stack(
+            (
+                x_pde,
+                y_pde,
+            )
+        ),
         dtype=dtype,
         device=device,
         requires_grad=True,
@@ -189,21 +446,71 @@ def generate_dataset_inf(
         device=device,
     )
 
-    # --------------------------------------------------
+    # ============================================================
     # Plot
-    # --------------------------------------------------
-    if plot:
-        fig, ax = plt.subplots(1, 2, figsize=(6.5, 3.2))
+    # ============================================================
 
-        im = ax[0].imshow(
+    if plot:
+
+        fig, ax = plt.subplots(
+            1,
+            2,
+            figsize=(7.0, 3.4),
+        )
+
+        # ========================================================
+        # Training rectangle
+        # ========================================================
+
+        rect_u = plt.Rectangle(
+            (
+                train_xmin,
+                train_ymin,
+            ),
+            train_xmax - train_xmin,
+            train_ymax - train_ymin,
+            fill=False,
+            edgecolor="#BDBDBD",
+            linewidth=1.2,
+            linestyle="-",
+        )
+
+        rect_k = plt.Rectangle(
+            (
+                train_xmin,
+                train_ymin,
+            ),
+            train_xmax - train_xmin,
+            train_ymax - train_ymin,
+            fill=False,
+            edgecolor="#BDBDBD",
+            linewidth=1.2,
+            linestyle="-",
+        )
+
+        # ========================================================
+        # u
+        # ========================================================
+
+        im_u = ax[0].imshow(
             U,
-            extent=[xmin, xmax, xmin, xmax],
+            extent=[
+                eval_xmin,
+                eval_xmax,
+                eval_ymin,
+                eval_ymax,
+            ],
             origin="lower",
             cmap="RdBu_r",
             vmin=-1,
             vmax=1,
             alpha=0.35,
+            aspect="equal",
         )
+
+        # --------------------------------------------------------
+        # u observation points
+        # --------------------------------------------------------
 
         ax[0].scatter(
             x_obs,
@@ -213,45 +520,212 @@ def generate_dataset_inf(
             vmin=-1,
             vmax=1,
             s=20,
-            edgecolors="#7A7A7A",
-            linewidths=0.25,
+            edgecolors="#BDBDBD",
+            linewidths=0.45,
         )
 
-        ax[0].set_title(f"$u(x,y)$ ({sampling})")
+        # --------------------------------------------------------
+        # Training rectangle
+        # --------------------------------------------------------
+
+        ax[0].add_patch(
+            rect_u
+        )
+
+        # --------------------------------------------------------
+        # Limits
+        # --------------------------------------------------------
+
+        ax[0].set_xlim(
+            eval_xmin,
+            eval_xmax,
+        )
+
+        ax[0].set_ylim(
+            eval_ymin,
+            eval_ymax,
+        )
+
+        # --------------------------------------------------------
+        # Labels
+        # --------------------------------------------------------
+
+        ax[0].set_title(
+            f"$u(x,y)$ ({sampling})"
+        )
+
         ax[0].set_xlabel("$x$")
         ax[0].set_ylabel("$y$")
-        ax[0].set_aspect("equal")
 
-        fig.colorbar(im, ax=ax[0], fraction=0.046, pad=0.04)
+        ax[0].set_aspect(
+            "equal"
+        )
 
-        im = ax[1].imshow(
+        # --------------------------------------------------------
+        # Colorbar
+        # --------------------------------------------------------
+
+        cbar_u = fig.colorbar(
+            im_u,
+            ax=ax[0],
+            fraction=0.046,
+            pad=0.04,
+        )
+
+        cbar_u.set_label(
+            r"$u$",
+            fontsize=8,
+        )
+
+        cbar_u.ax.tick_params(
+            labelsize=7,
+        )
+
+        # ========================================================
+        # k
+        # ========================================================
+
+        im_k = ax[1].imshow(
             K,
-            extent=[xmin, xmax, xmin, xmax],
+            extent=[
+                eval_xmin,
+                eval_xmax,
+                eval_ymin,
+                eval_ymax,
+            ],
             origin="lower",
-            #cmap="RdBu_r",
+            cmap="GnBu",
             vmin=1,
             vmax=3,
             alpha=0.35,
+            aspect="equal",
         )
+
+        # --------------------------------------------------------
+        # k observation points
+        # --------------------------------------------------------
 
         ax[1].scatter(
             x_obs_k,
             y_obs_k,
             c=k_obs,
-            cmap="viridis",
+            cmap="GnBu",
+            vmin=1,
+            vmax=3,
             s=20,
-            edgecolors="#7A7A7A",
-            linewidths=0.25,
+            edgecolors="#BDBDBD",
+            linewidths=0.45,
         )
+
+        # --------------------------------------------------------
+        # Training rectangle
+        # --------------------------------------------------------
+
+        ax[1].add_patch(
+            rect_k
+        )
+
+        # --------------------------------------------------------
+        # Limits
+        # --------------------------------------------------------
+
+        ax[1].set_xlim(
+            eval_xmin,
+            eval_xmax,
+        )
+
+        ax[1].set_ylim(
+            eval_ymin,
+            eval_ymax,
+        )
+
+        # --------------------------------------------------------
+        # Labels
+        # --------------------------------------------------------
 
         ax[1].set_xlabel("$x$")
         ax[1].set_ylabel("$y$")
-        ax[1].set_title(r"$k$ observation locations")
-        ax[1].set_aspect("equal")
 
-        fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
+        ax[1].set_title(
+            r"$k(x,y)$"
+        )
+
+        ax[1].set_aspect(
+            "equal"
+        )
+
+        # --------------------------------------------------------
+        # Colorbar
+        # --------------------------------------------------------
+
+        cbar_k = fig.colorbar(
+            im_k,
+            ax=ax[1],
+            fraction=0.046,
+            pad=0.04,
+        )
+
+        cbar_k.set_label(
+            r"$k$",
+            fontsize=8,
+        )
+
+        cbar_k.ax.tick_params(
+            labelsize=7,
+        )
+
+        # ========================================================
+        # Common ticks
+        # ========================================================
+
+        ticks_x = [
+            eval_xmin,
+            train_xmin,
+            0.0,
+            train_xmax,
+            eval_xmax,
+        ]
+
+        ticks_y = [
+            eval_ymin,
+            train_ymin,
+            0.0,
+            train_ymax,
+            eval_ymax,
+        ]
+
+        for a in ax:
+
+            a.set_xticks(
+                ticks_x
+            )
+
+            a.set_yticks(
+                ticks_y
+            )
+
+            a.tick_params(
+                labelsize=8,
+                length=3,
+            )
+
+        # ========================================================
+        # Overall title
+        # ========================================================
+
+        fig.suptitle(
+            sampling.capitalize(),
+            fontsize=9,
+            y=1.02,
+        )
+
         plt.tight_layout()
+
         plt.show()
+
+    # ============================================================
+    # Return
+    # ============================================================
 
     return (
         X_obs,
@@ -263,7 +737,7 @@ def generate_dataset_inf(
         X,
         Y,
         U,
-        K
+        K,
     )
 
 
@@ -1080,7 +1554,7 @@ def evaluate_model_inf(
             ],
 
             hspace=0.45,
-            wspace=0.30,
+            wspace=0.50,
         )
 
         # --------------------------------------------------------
@@ -1136,13 +1610,9 @@ def evaluate_model_inf(
         # Error scales
         # ========================================================
 
-        err_u_max = np.max(
-            error_u
-        )
+        err_u_max = 0.4#np.max(error_u)
 
-        err_k_max = np.max(
-            error_k
-        )
+        err_k_max = 0.4#np.max(error_k)
 
         if err_u_max == 0:
             err_u_max = 1e-12
@@ -1175,11 +1645,11 @@ def evaluate_model_inf(
                 X_obs_np[:, 1],
 
                 facecolors="none",
-                edgecolors="#7A7A7A",
+                edgecolors="#BDBDBD",
 
                 s=20,
-                alpha=0.7,
-                linewidths=0.5,
+                alpha=0.8,
+                linewidths=0.6,
             )
 
         # --------------------------------------------------------
@@ -1196,7 +1666,7 @@ def evaluate_model_inf(
             train_ymax - train_ymin,
 
             fill=False,
-            edgecolor="#7A7A7A",
+            edgecolor="#BDBDBD",
             linewidth=1.0,
             linestyle="-",
         )
@@ -1213,7 +1683,7 @@ def evaluate_model_inf(
             error_u,
             extent=extent,
             origin="lower",
-            cmap="viridis",
+            cmap="magma",
             vmin=0,
             vmax=err_u_max,
             aspect="equal",
@@ -1230,11 +1700,11 @@ def evaluate_model_inf(
                 X_obs_np[:, 1],
 
                 facecolors="none",
-                edgecolors="#7A7A7A",
+                edgecolors="#BDBDBD",
 
                 s=20,
-                alpha=0.7,
-                linewidths=0.5,
+                alpha=0.8,
+                linewidths=0.6,
             )
 
         # --------------------------------------------------------
@@ -1251,7 +1721,7 @@ def evaluate_model_inf(
             train_ymax - train_ymin,
 
             fill=False,
-            edgecolor="#7A7A7A",
+            edgecolor="#BDBDBD",
             linewidth=1.0,
             linestyle="-",
         )
@@ -1285,11 +1755,11 @@ def evaluate_model_inf(
                 X_obs_k_np[:, 1],
 
                 facecolors="none",
-                edgecolors="#7A7A7A",
+                edgecolors="#BDBDBD",
 
                 s=20,
-                alpha=0.7,
-                linewidths=0.5,
+                alpha=0.8,
+                linewidths=0.6,
             )
 
         # --------------------------------------------------------
@@ -1306,7 +1776,7 @@ def evaluate_model_inf(
             train_ymax - train_ymin,
 
             fill=False,
-            edgecolor="#7A7A7A",
+            edgecolor="#BDBDBD",
             linewidth=1.0,
             linestyle="-",
         )
@@ -1314,6 +1784,12 @@ def evaluate_model_inf(
         ax10.add_patch(
             rect_k
         )
+
+        ax00.set_xlim(eval_xmin, eval_xmax)
+        ax00.set_ylim(eval_ymin, eval_ymax)
+
+        ax01.set_xlim(eval_xmin, eval_xmax)
+        ax01.set_ylim(eval_ymin, eval_ymax)
 
         # ========================================================
         # ROW 2 — k error
@@ -1323,7 +1799,7 @@ def evaluate_model_inf(
             error_k,
             extent=extent,
             origin="lower",
-            cmap="viridis",
+            cmap="magma",
             vmin=0,
             vmax=err_k_max,
             aspect="equal",
@@ -1340,11 +1816,11 @@ def evaluate_model_inf(
                 X_obs_k_np[:, 1],
 
                 facecolors="none",
-                edgecolors="#7A7A7A",
+                edgecolors="#BDBDBD",
 
                 s=20,
-                alpha=0.7,
-                linewidths=0.5,
+                alpha=0.8,
+                linewidths=0.6,
             )
 
         # --------------------------------------------------------
@@ -1361,7 +1837,7 @@ def evaluate_model_inf(
             train_ymax - train_ymin,
 
             fill=False,
-            edgecolor="#7A7A7A",
+            edgecolor="#BDBDBD",
             linewidth=1.0,
             linestyle="-",
         )
@@ -1369,7 +1845,10 @@ def evaluate_model_inf(
         ax11.add_patch(
             rect_k_err
         )
-
+        ax10.set_xlim(eval_xmin, eval_xmax)
+        ax10.set_ylim(eval_ymin, eval_ymax)
+        ax11.set_xlim(eval_xmin, eval_xmax)
+        ax11.set_ylim(eval_ymin, eval_ymax)
         # ========================================================
         # ROW 3 — Relative L2 errors
         # ========================================================
@@ -1395,8 +1874,8 @@ def evaluate_model_inf(
 
         width = 0.40
 
-        u_color = "#2F6DAA"   # blue
-        k_color = "#7F7F7F"   # gray
+        u_color = "#2255a080"   # blue
+        k_color = "#91cc9b"   # gray
 
         # --------------------------------------------------------
         # u bars
@@ -1559,7 +2038,7 @@ def evaluate_model_inf(
         fig.suptitle(
             sampling.capitalize(),
             fontsize=9,
-            y=0.92,
+            y=0.90,
         )
 
         # ========================================================

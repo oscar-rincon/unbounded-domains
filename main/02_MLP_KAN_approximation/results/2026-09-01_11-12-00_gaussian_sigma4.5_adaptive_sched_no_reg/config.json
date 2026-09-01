@@ -1,0 +1,22 @@
+{
+  "adam_lr": 0.001,
+  "adam_iters": 2000,
+  "lbfgs_iters": 2000,
+  "print_every": 100,
+  "save_every": 100,
+  "lambda_pde_scheduler": true,
+  "adaptive_weights": true,
+  "alpha": 7,
+  "update_every": 100,
+  "regularization": false,
+  "sampling": "gaussian",
+  "sigma": 4.5,
+  "exp_scale": 1.0,
+  "n_obs_u": 100,
+  "n_obs_k": 100,
+  "n_pde": 1000,
+  "seed": 2,
+  "pde_alpha": 0.5,
+  "pde_beta": 5,
+  "epsilon": 1
+}
