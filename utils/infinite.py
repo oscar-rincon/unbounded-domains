@@ -1219,6 +1219,8 @@ def evaluate_model_inf(
     device="cpu",
 
     plot=False,
+    show_bar_ylabel=False,
+    show_legend=False,
     verbose=False,
 
     save_results=False,
@@ -1928,11 +1930,14 @@ def evaluate_model_inf(
         # Legend
         # --------------------------------------------------------
 
-        ax_error.legend(
-            fontsize=7,
-            frameon=False,
-            loc="upper right",
-        )
+        if show_legend:
+            ax_error.legend(
+                fontsize=7,
+                frameon=False,
+                loc="upper right",
+            )
+        else:
+            ax_error.legend().set_visible(False)    
 
         # --------------------------------------------------------
         # Tick parameters
@@ -1994,6 +1999,19 @@ def evaluate_model_inf(
                 fontsize=6,
                 rotation=0,
             )
+
+
+        # --------------------------------------------------------
+        # Y-axis label
+        # --------------------------------------------------------
+
+        if show_bar_ylabel:
+            ax_error.set_ylabel(
+                r"Relative $L_2$ error",
+                fontsize=8,
+            )
+        else:
+            ax_error.set_ylabel("")
 
         # ========================================================
         # Spatial ticks
