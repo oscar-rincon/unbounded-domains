@@ -1180,7 +1180,6 @@ def generate_dataset_inf(
 # 
 
 
-from datetime import datetime
 
 
 def evaluate_model_inf(
@@ -1924,6 +1923,7 @@ def evaluate_model_inf(
         ax_error.set_xticklabels(
             regions,
             fontsize=7,
+            color="black"
         )
 
         # --------------------------------------------------------
@@ -1942,18 +1942,21 @@ def evaluate_model_inf(
         # --------------------------------------------------------
         # Tick parameters
         # --------------------------------------------------------
-
+        axis_color = "gray"
         ax_error.tick_params(
-            axis="y",
-            labelsize=7,
-            length=3,
+            axis="both",
+            #labelcolor="black",
+            labelsize=6,
+            colors=axis_color,
+            length=2,
+            width=0.5,
         )
 
-        ax_error.tick_params(
-            axis="x",
-            labelsize=8,
-            length=3,
-        )
+        ax_error.set_xticklabels(
+        regions,
+        fontsize=6,
+        color="black",
+    )
 
         # --------------------------------------------------------
         # Remove top and right borders
@@ -1961,6 +1964,12 @@ def evaluate_model_inf(
 
         ax_error.spines["top"].set_visible(False)
         ax_error.spines["right"].set_visible(False)
+
+        ax_error.spines["left"].set_color(axis_color)
+        ax_error.spines["bottom"].set_color(axis_color)
+
+        ax_error.spines["left"].set_linewidth(0.5)
+        ax_error.spines["bottom"].set_linewidth(0.5)
 
         # --------------------------------------------------------
         # Annotate u bars
@@ -1978,6 +1987,7 @@ def evaluate_model_inf(
                 ha="center",
                 va="bottom",
                 fontsize=6,
+                color="gray",
                 rotation=0,
             )
 
@@ -1997,6 +2007,7 @@ def evaluate_model_inf(
                 ha="center",
                 va="bottom",
                 fontsize=6,
+                color="gray",
                 rotation=0,
             )
 
@@ -2014,9 +2025,8 @@ def evaluate_model_inf(
             ax_error.set_ylabel("")
 
         # ========================================================
-        # Spatial ticks
+        # Spatial ticks and axes style
         # ========================================================
-
         ticks = [
             eval_xmin,
             train_xmin,
@@ -2024,27 +2034,30 @@ def evaluate_model_inf(
             eval_xmax,
         ]
 
+        axis_color = "gray"
+
         for a in [
             ax00,
             ax01,
             ax10,
             ax11,
         ]:
+            a.set_xticks(ticks)
+            a.set_yticks(ticks)
 
-            a.set_xticks(
-                ticks
-            )
-
-            a.set_yticks(
-                ticks
-            )
-
+            # Tick marks and tick numbers
             a.tick_params(
-                labelsize=8,
-                length=3,
+                axis="both",
+                labelsize=6,
+                colors=axis_color,
+                length=2,
+                width=0.5,
             )
 
-
+            # Axis lines
+            for spine in a.spines.values():
+                spine.set_color(axis_color)
+                spine.set_linewidth(0.5)
 
             a.set_xlabel("")
             a.set_ylabel("")
@@ -2073,7 +2086,7 @@ def evaluate_model_inf(
         )
 
         cbar_u.set_label(
-            r"$u$",
+            r"$\hat{u}$",
             fontsize=8,
         )
 
@@ -2095,7 +2108,7 @@ def evaluate_model_inf(
         )
 
         cbar_err_u.set_label(
-            r"$|u-\hat{u}|$",
+            r"$|\hat{u}-u|$",
             fontsize=8,
         )
 
@@ -2117,7 +2130,7 @@ def evaluate_model_inf(
         )
 
         cbar_k.set_label(
-            r"$k$",
+            r"$\hat{k}$",
             fontsize=8,
         )
 
@@ -2139,13 +2152,30 @@ def evaluate_model_inf(
         )
 
         cbar_err_k.set_label(
-            r"$|k-\hat{k}|$",
+            r"$|\hat{k}-k|$",
             fontsize=8,
         )
 
         cbar_err_k.ax.tick_params(
             labelsize=7
         )
+
+        for cbar in [
+            cbar_u,
+            cbar_err_u,
+            cbar_k,
+            cbar_err_k,
+        ]:
+            cbar.ax.tick_params(
+                axis="x",
+                labelsize=6,
+                colors=axis_color,
+                length=2,
+                width=0.5,
+            )
+
+            cbar.outline.set_edgecolor(axis_color)
+            cbar.outline.set_linewidth(0.5)
 
         # ========================================================
         # Save plot
