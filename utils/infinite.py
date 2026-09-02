@@ -1876,7 +1876,7 @@ def evaluate_model_inf(
         width = 0.40
 
         u_color = "#2255a080"   # blue
-        k_color = "#91cc9b"   # gray
+        k_color = "#d6d6d683"   # gray
 
         # --------------------------------------------------------
         # u bars
