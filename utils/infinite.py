@@ -1230,7 +1230,7 @@ def evaluate_model_inf(
 ):
 
     """
-    Evaluate spatial generalization outside the training domain.
+    Evaluate spatial generalization outside the training domain using MAE.
 
     Figure structure:
 
@@ -1240,22 +1240,15 @@ def evaluate_model_inf(
                 ├──────────────────┼──────────────────┤
             k   │      k_hat       │    |k-k_hat|     │
                 ├──────────────────┴──────────────────┤
-                │        Relative L2 errors            │
-                │  Inside | Outside | Global          │
+                │         Mean Absolute Error         │
+                │     Inside | Outside | Global       │
                 └─────────────────────────────────────┘
-
-    The training-domain rectangle is overlaid on the
-    prediction and error maps.
-
-    Errors are reported globally, inside the training
-    domain, and outside the training domain.
-
-    Returns
-    -------
-    dict
-        Dictionary containing relative L2 errors,
-        predictions, pointwise errors, and evaluation grid.
     """
+    import os
+    import numpy as np
+    import torch
+    import matplotlib.pyplot as plt
+    from datetime import datetime
 
     # ============================================================
     # Evaluation grid
@@ -1331,7 +1324,7 @@ def evaluate_model_inf(
         )
 
     # ============================================================
-    # Pointwise errors
+    # Pointwise absolute errors
     # ============================================================
 
     error_u = np.abs(
@@ -1343,37 +1336,14 @@ def evaluate_model_inf(
     )
 
     # ============================================================
-    # Global relative L2 errors
+    # Global Mean Absolute Error (MAE)
     # ============================================================
 
-    err_u_global = (
-        np.linalg.norm(
-            U_pred - U
-        )
-        /
-        (
-            np.linalg.norm(U)
-            + 1e-14
-        )
-    )
-
-    err_k_global = (
-        np.linalg.norm(
-            K_pred - K_exact
-        )
-        /
-        (
-            np.linalg.norm(K_exact)
-            + 1e-14
-        )
-    )
+    err_u_global = np.mean(error_u)
+    err_k_global = np.mean(error_k)
 
     # ============================================================
     # Outside-training-domain mask
-    #
-    # True = points outside
-    # [train_xmin, train_xmax] x
-    # [train_ymin, train_ymax]
     # ============================================================
 
     outside_mask = (
@@ -1386,73 +1356,21 @@ def evaluate_model_inf(
         (Y > train_ymax)
     )
 
-    # ============================================================
-    # Outside-domain errors
-    # ============================================================
-
-    U_outside = U[outside_mask]
-    U_pred_outside = U_pred[outside_mask]
-
-    K_outside = K_exact[outside_mask]
-    K_pred_outside = K_pred[outside_mask]
-
-    err_u_outside = (
-        np.linalg.norm(
-            U_pred_outside - U_outside
-        )
-        /
-        (
-            np.linalg.norm(U_outside)
-            + 1e-14
-        )
-    )
-
-    err_k_outside = (
-        np.linalg.norm(
-            K_pred_outside - K_outside
-        )
-        /
-        (
-            np.linalg.norm(K_outside)
-            + 1e-14
-        )
-    )
-
-    # ============================================================
-    # Inside-domain errors
-    # ============================================================
-
     inside_mask = ~outside_mask
 
-    err_u_inside = (
-        np.linalg.norm(
-            U_pred[inside_mask]
-            -
-            U[inside_mask]
-        )
-        /
-        (
-            np.linalg.norm(
-                U[inside_mask]
-            )
-            + 1e-14
-        )
-    )
+    # ============================================================
+    # Outside-domain errors (MAE)
+    # ============================================================
 
-    err_k_inside = (
-        np.linalg.norm(
-            K_pred[inside_mask]
-            -
-            K_exact[inside_mask]
-        )
-        /
-        (
-            np.linalg.norm(
-                K_exact[inside_mask]
-            )
-            + 1e-14
-        )
-    )
+    err_u_outside = np.mean(error_u[outside_mask])
+    err_k_outside = np.mean(error_k[outside_mask])
+
+    # ============================================================
+    # Inside-domain errors (MAE)
+    # ============================================================
+
+    err_u_inside = np.mean(error_u[inside_mask])
+    err_k_inside = np.mean(error_k[inside_mask])
 
     # ============================================================
     # Verbose
@@ -1461,7 +1379,7 @@ def evaluate_model_inf(
     if verbose:
 
         print("\n========================================")
-        print("Spatial generalization")
+        print("Spatial generalization (MAE)")
         print("========================================")
 
         print(
@@ -1476,35 +1394,17 @@ def evaluate_model_inf(
             f"[{eval_ymin}, {eval_ymax}]"
         )
 
-        print("\nGlobal relative L2 error")
-
-        print(
-            f"u : {err_u_global:.3e}"
-        )
-
-        print(
-            f"k : {err_k_global:.3e}"
-        )
+        print("\nGlobal MAE")
+        print(f"u : {err_u_global:.3e}")
+        print(f"k : {err_k_global:.3e}")
 
         print("\nInside training domain")
-
-        print(
-            f"u : {err_u_inside:.3e}"
-        )
-
-        print(
-            f"k : {err_k_inside:.3e}"
-        )
+        print(f"u : {err_u_inside:.3e}")
+        print(f"k : {err_k_inside:.3e}")
 
         print("\nOutside training domain")
-
-        print(
-            f"u : {err_u_outside:.3e}"
-        )
-
-        print(
-            f"k : {err_k_outside:.3e}"
-        )
+        print(f"u : {err_u_outside:.3e}")
+        print(f"k : {err_k_outside:.3e}")
 
     # ============================================================
     # Convert sampling points
@@ -1546,48 +1446,23 @@ def evaluate_model_inf(
         gs = fig.add_gridspec(
             3,
             2,
-
-            # Third row slightly shorter
             height_ratios=[
                 1.0,
                 1.0,
                 0.5,
             ],
-
             hspace=0.45,
             wspace=0.50,
         )
 
-        # --------------------------------------------------------
-        # Spatial panels
-        # --------------------------------------------------------
-
-        ax00 = fig.add_subplot(
-            gs[0, 0]
-        )
-
-        ax01 = fig.add_subplot(
-            gs[0, 1]
-        )
-
-        ax10 = fig.add_subplot(
-            gs[1, 0]
-        )
-
-        ax11 = fig.add_subplot(
-            gs[1, 1]
-        )
-
-        # --------------------------------------------------------
-        # Third row spans both columns
-        # --------------------------------------------------------
-
-        ax_error = fig.add_subplot(
-            gs[2, :]
-        )
+        ax00 = fig.add_subplot(gs[0, 0])
+        ax01 = fig.add_subplot(gs[0, 1])
+        ax10 = fig.add_subplot(gs[1, 0])
+        ax11 = fig.add_subplot(gs[1, 1])
+        ax_error = fig.add_subplot(gs[2, :])
 
         # ========================================================
-        # Common extent
+        # Common extent & Scales
         # ========================================================
 
         extent = [
@@ -1597,32 +1472,17 @@ def evaluate_model_inf(
             eval_ymax,
         ]
 
-        # ========================================================
-        # Fixed solution scales
-        # ========================================================
-
         u_vmin = -1
         u_vmax = 1
 
         k_vmin = 1
         k_vmax = 3
 
-        # ========================================================
-        # Error scales
-        # ========================================================
-
-        err_u_max = 0.4#np.max(error_u)
-
-        err_k_max = 0.4#np.max(error_k)
-
-        if err_u_max == 0:
-            err_u_max = 1e-12
-
-        if err_k_max == 0:
-            err_k_max = 1e-12
+        err_u_max = 0.4
+        err_k_max = 0.4
 
         # ========================================================
-        # ROW 1 — u prediction
+        # ROW 1 — u prediction & error
         # ========================================================
 
         im_u = ax00.imshow(
@@ -1635,51 +1495,6 @@ def evaluate_model_inf(
             aspect="equal",
         )
 
-        # --------------------------------------------------------
-        # u sampling
-        # --------------------------------------------------------
-
-        if X_obs_np is not None:
-
-            ax00.scatter(
-                X_obs_np[:, 0],
-                X_obs_np[:, 1],
-
-                facecolors="none",
-                edgecolors="#BDBDBD",
-
-                s=20,
-                alpha=0.8,
-                linewidths=0.6,
-            )
-
-        # --------------------------------------------------------
-        # Training-domain rectangle
-        # --------------------------------------------------------
-
-        rect_u = plt.Rectangle(
-            (
-                train_xmin,
-                train_ymin,
-            ),
-
-            train_xmax - train_xmin,
-            train_ymax - train_ymin,
-
-            fill=False,
-            edgecolor="#BDBDBD",
-            linewidth=1.0,
-            linestyle="-",
-        )
-
-        ax00.add_patch(
-            rect_u
-        )
-
-        # ========================================================
-        # ROW 1 — u error
-        # ========================================================
-
         im_err_u = ax01.imshow(
             error_u,
             extent=extent,
@@ -1690,49 +1505,8 @@ def evaluate_model_inf(
             aspect="equal",
         )
 
-        # --------------------------------------------------------
-        # u sampling
-        # --------------------------------------------------------
-
-        if X_obs_np is not None:
-
-            ax01.scatter(
-                X_obs_np[:, 0],
-                X_obs_np[:, 1],
-
-                facecolors="none",
-                edgecolors="#BDBDBD",
-
-                s=20,
-                alpha=0.8,
-                linewidths=0.6,
-            )
-
-        # --------------------------------------------------------
-        # Training-domain rectangle
-        # --------------------------------------------------------
-
-        rect_u_err = plt.Rectangle(
-            (
-                train_xmin,
-                train_ymin,
-            ),
-
-            train_xmax - train_xmin,
-            train_ymax - train_ymin,
-
-            fill=False,
-            edgecolor="#BDBDBD",
-            linewidth=1.0,
-            linestyle="-",
-        )
-
-        ax01.add_patch(
-            rect_u_err
-        )
-
         # ========================================================
-        # ROW 2 — k prediction
+        # ROW 2 — k prediction & error
         # ========================================================
 
         im_k = ax10.imshow(
@@ -1745,57 +1519,6 @@ def evaluate_model_inf(
             aspect="equal",
         )
 
-        # --------------------------------------------------------
-        # k sampling
-        # --------------------------------------------------------
-
-        if X_obs_k_np is not None:
-
-            ax10.scatter(
-                X_obs_k_np[:, 0],
-                X_obs_k_np[:, 1],
-
-                facecolors="none",
-                edgecolors="#BDBDBD",
-
-                s=20,
-                alpha=0.8,
-                linewidths=0.6,
-            )
-
-        # --------------------------------------------------------
-        # Training-domain rectangle
-        # --------------------------------------------------------
-
-        rect_k = plt.Rectangle(
-            (
-                train_xmin,
-                train_ymin,
-            ),
-
-            train_xmax - train_xmin,
-            train_ymax - train_ymin,
-
-            fill=False,
-            edgecolor="#BDBDBD",
-            linewidth=1.0,
-            linestyle="-",
-        )
-
-        ax10.add_patch(
-            rect_k
-        )
-
-        ax00.set_xlim(eval_xmin, eval_xmax)
-        ax00.set_ylim(eval_ymin, eval_ymax)
-
-        ax01.set_xlim(eval_xmin, eval_xmax)
-        ax01.set_ylim(eval_ymin, eval_ymax)
-
-        # ========================================================
-        # ROW 2 — k error
-        # ========================================================
-
         im_err_k = ax11.imshow(
             error_k,
             extent=extent,
@@ -1806,81 +1529,52 @@ def evaluate_model_inf(
             aspect="equal",
         )
 
-        # --------------------------------------------------------
-        # k sampling
-        # --------------------------------------------------------
+        # Add observations and rectangles
+        for ax, obs in zip([ax00, ax01], [X_obs_np, X_obs_np]):
+            if obs is not None:
+                ax.scatter(obs[:, 0], obs[:, 1], facecolors="none", edgecolors="#BDBDBD", s=20, alpha=0.8, linewidths=0.6)
+            rect = plt.Rectangle((train_xmin, train_ymin), train_xmax - train_xmin, train_ymax - train_ymin, fill=False, edgecolor="#BDBDBD", linewidth=1.0, linestyle="-")
+            ax.add_patch(rect)
+            ax.set_xlim(eval_xmin, eval_xmax)
+            ax.set_ylim(eval_ymin, eval_ymax)
 
-        if X_obs_k_np is not None:
+        for ax, obs in zip([ax10, ax11], [X_obs_k_np, X_obs_k_np]):
+            if obs is not None:
+                ax.scatter(obs[:, 0], obs[:, 1], facecolors="none", edgecolors="#BDBDBD", s=20, alpha=0.8, linewidths=0.6)
+            rect = plt.Rectangle((train_xmin, train_ymin), train_xmax - train_xmin, train_ymax - train_ymin, fill=False, edgecolor="#BDBDBD", linewidth=1.0, linestyle="-")
+            ax.add_patch(rect)
+            ax.set_xlim(eval_xmin, eval_xmax)
+            ax.set_ylim(eval_ymin, eval_ymax)
 
-            ax11.scatter(
-                X_obs_k_np[:, 0],
-                X_obs_k_np[:, 1],
-
-                facecolors="none",
-                edgecolors="#BDBDBD",
-
-                s=20,
-                alpha=0.8,
-                linewidths=0.6,
-            )
-
-        # --------------------------------------------------------
-        # Training-domain rectangle
-        # --------------------------------------------------------
-
-        rect_k_err = plt.Rectangle(
-            (
-                train_xmin,
-                train_ymin,
-            ),
-
-            train_xmax - train_xmin,
-            train_ymax - train_ymin,
-
-            fill=False,
-            edgecolor="#BDBDBD",
-            linewidth=1.0,
-            linestyle="-",
-        )
-
-        ax11.add_patch(
-            rect_k_err
-        )
-        ax10.set_xlim(eval_xmin, eval_xmax)
-        ax10.set_ylim(eval_ymin, eval_ymax)
-        ax11.set_xlim(eval_xmin, eval_xmax)
-        ax11.set_ylim(eval_ymin, eval_ymax)
         # ========================================================
-        # ROW 3 — Relative L2 errors
+        # ROW 3 — MAE Bar Plot (Inside, Outside, Global)
         # ========================================================
 
         regions = [
             "Inside",
             "Outside",
+            "Global",
         ]
 
         u_errors = [
             err_u_inside,
             err_u_outside,
+            err_u_global,
         ]
 
         k_errors = [
             err_k_inside,
             err_k_outside,
+            err_k_global,
         ]
 
         x_pos = np.arange(
             len(regions)
         )
 
-        width = 0.40
-
+        width = 0.47
         u_color = "#2255a080"   # blue
         k_color = "#d6d6d683"   # gray
-
-        # --------------------------------------------------------
-        # u bars
-        # --------------------------------------------------------
 
         bars_u = ax_error.bar(
             x_pos - width / 2,
@@ -1890,10 +1584,6 @@ def evaluate_model_inf(
             label=r"$u$",
         )
 
-        # --------------------------------------------------------
-        # k bars
-        # --------------------------------------------------------
-
         bars_k = ax_error.bar(
             x_pos + width / 2,
             k_errors,
@@ -1902,278 +1592,72 @@ def evaluate_model_inf(
             label=r"$k$",
         )
 
-        # --------------------------------------------------------
-        # Logarithmic scale
-        # --------------------------------------------------------
-
-        ax_error.set_yscale(
-            "log"
-        )
- 
-        ax_error.set_ylim(1e-4, 1e7)
- 
-        # --------------------------------------------------------
-        # X axis
-        # --------------------------------------------------------
-
-        ax_error.set_xticks(
-            x_pos
-        )
-
-        ax_error.set_xticklabels(
-            regions,
-            fontsize=7,
-            color="black"
-        )
-
-        # --------------------------------------------------------
-        # Legend
-        # --------------------------------------------------------
+        ax_error.set_yscale("log")
+        ax_error.set_ylim(1e-4, 1e2)
+        
+        ax_error.set_xticks(x_pos)
+        ax_error.set_xticklabels(regions, fontsize=7, color="black")
 
         if show_legend:
-            ax_error.legend(
-                fontsize=7,
-                frameon=False,
-                loc="upper right",
-            )
+            ax_error.legend(fontsize=7, frameon=False, loc="upper right")
         else:
             ax_error.legend().set_visible(False)    
 
-        # --------------------------------------------------------
-        # Tick parameters
-        # --------------------------------------------------------
         axis_color = "gray"
-        ax_error.tick_params(
-            axis="both",
-            #labelcolor="black",
-            labelsize=6,
-            colors=axis_color,
-            length=2,
-            width=0.5,
-        )
-
-        ax_error.set_xticklabels(
-        regions,
-        fontsize=6,
-        color="black",
-    )
-
-        # --------------------------------------------------------
-        # Remove top and right borders
-        # --------------------------------------------------------
+        ax_error.tick_params(axis="both", labelsize=6, colors=axis_color, length=2, width=0.5)
 
         ax_error.spines["top"].set_visible(False)
         ax_error.spines["right"].set_visible(False)
-
         ax_error.spines["left"].set_color(axis_color)
         ax_error.spines["bottom"].set_color(axis_color)
-
         ax_error.spines["left"].set_linewidth(0.5)
         ax_error.spines["bottom"].set_linewidth(0.5)
 
-        # --------------------------------------------------------
-        # Annotate u bars
-        # --------------------------------------------------------
+        # Annotate bars
+        for bar, value in zip(bars_u, u_errors):
+            ax_error.text(bar.get_x() + bar.get_width() / 2, value, f"{value:.2e}", ha="center", va="bottom", fontsize=6, color="gray", rotation=0)
 
-        for bar, value in zip(
-            bars_u,
-            u_errors,
-        ):
-            ax_error.text(
-                bar.get_x()
-                + bar.get_width() / 2,
-                value,
-                f"{value:.2e}",
-                ha="center",
-                va="bottom",
-                fontsize=6,
-                color="gray",
-                rotation=0,
-            )
-
-        # --------------------------------------------------------
-        # Annotate k bars
-        # --------------------------------------------------------
-
-        for bar, value in zip(
-            bars_k,
-            k_errors,
-        ):
-            ax_error.text(
-                bar.get_x()
-                + bar.get_width() / 2,
-                value,
-                f"{value:.2e}",
-                ha="center",
-                va="bottom",
-                fontsize=6,
-                color="gray",
-                rotation=0,
-            )
-
-
-        # --------------------------------------------------------
-        # Y-axis label
-        # --------------------------------------------------------
+        for bar, value in zip(bars_k, k_errors):
+            ax_error.text(bar.get_x() + bar.get_width() / 2, value, f"{value:.2e}", ha="center", va="bottom", fontsize=6, color="gray", rotation=0)
 
         if show_bar_ylabel:
-            ax_error.set_ylabel(
-                r"Relative $L_2$ error",
-                fontsize=8,
-            )
+            ax_error.set_ylabel("MAE", fontsize=8)
         else:
             ax_error.set_ylabel("")
 
         # ========================================================
-        # Spatial ticks and axes style
+        # Axes styling & Colorbars
         # ========================================================
-        ticks = [
-            eval_xmin,
-            train_xmin,
-            train_xmax,
-            eval_xmax,
-        ]
+        
+        ticks = [eval_xmin, train_xmin, train_xmax, eval_xmax]
 
-        axis_color = "gray"
-
-        for a in [
-            ax00,
-            ax01,
-            ax10,
-            ax11,
-        ]:
+        for a in [ax00, ax01, ax10, ax11]:
             a.set_xticks(ticks)
             a.set_yticks(ticks)
-
-            # Tick marks and tick numbers
-            a.tick_params(
-                axis="both",
-                labelsize=6,
-                colors=axis_color,
-                length=2,
-                width=0.5,
-            )
-
-            # Axis lines
+            a.tick_params(axis="both", labelsize=6, colors=axis_color, length=2, width=0.5)
             for spine in a.spines.values():
                 spine.set_color(axis_color)
                 spine.set_linewidth(0.5)
-
             a.set_xlabel("")
             a.set_ylabel("")
 
-        # ========================================================
-        # Sampling label
-        # ========================================================
+        fig.suptitle(sampling.capitalize(), fontsize=9, y=0.90)
 
-        fig.suptitle(
-            sampling.capitalize(),
-            fontsize=9,
-            y=0.90,
-        )
+        # Colorbar setups
+        cbar_u = fig.colorbar(im_u, ax=ax00, orientation="horizontal", fraction=0.028, pad=0.20, aspect=30)
+        cbar_u.set_label(r"$\hat{u}$", fontsize=8)
+        
+        cbar_err_u = fig.colorbar(im_err_u, ax=ax01, orientation="horizontal", fraction=0.028, pad=0.20, aspect=30)
+        cbar_err_u.set_label(r"$|\hat{u}-u|$", fontsize=8)
 
-        # ========================================================
-        # Colorbars
-        # ========================================================
+        cbar_k = fig.colorbar(im_k, ax=ax10, orientation="horizontal", fraction=0.028, pad=0.20, aspect=30)
+        cbar_k.set_label(r"$\hat{k}$", fontsize=8)
 
-        cbar_u = fig.colorbar(
-            im_u,
-            ax=ax00,
-            orientation="horizontal",
-            fraction=0.028,
-            pad=0.20,
-            aspect=30,
-        )
+        cbar_err_k = fig.colorbar(im_err_k, ax=ax11, orientation="horizontal", fraction=0.028, pad=0.20, aspect=30)
+        cbar_err_k.set_label(r"$|\hat{k}-k|$", fontsize=8)
 
-        cbar_u.set_label(
-            r"$\hat{u}$",
-            fontsize=8,
-        )
-
-        cbar_u.ax.tick_params(
-            labelsize=7
-        )
-
-        # --------------------------------------------------------
-        # u error colorbar
-        # --------------------------------------------------------
-
-        cbar_err_u = fig.colorbar(
-            im_err_u,
-            ax=ax01,
-            orientation="horizontal",
-            fraction=0.028,
-            pad=0.20,
-            aspect=30,
-        )
-
-        cbar_err_u.set_label(
-            r"$|\hat{u}-u|$",
-            fontsize=8,
-        )
-
-        cbar_err_u.ax.tick_params(
-            labelsize=7
-        )
-
-        # --------------------------------------------------------
-        # k colorbar
-        # --------------------------------------------------------
-
-        cbar_k = fig.colorbar(
-            im_k,
-            ax=ax10,
-            orientation="horizontal",
-            fraction=0.028,
-            pad=0.20,
-            aspect=30,
-        )
-
-        cbar_k.set_label(
-            r"$\hat{k}$",
-            fontsize=8,
-        )
-
-        cbar_k.ax.tick_params(
-            labelsize=7
-        )
-
-        # --------------------------------------------------------
-        # k error colorbar
-        # --------------------------------------------------------
-
-        cbar_err_k = fig.colorbar(
-            im_err_k,
-            ax=ax11,
-            orientation="horizontal",
-            fraction=0.028,
-            pad=0.20,
-            aspect=30,
-        )
-
-        cbar_err_k.set_label(
-            r"$|\hat{k}-k|$",
-            fontsize=8,
-        )
-
-        cbar_err_k.ax.tick_params(
-            labelsize=7
-        )
-
-        for cbar in [
-            cbar_u,
-            cbar_err_u,
-            cbar_k,
-            cbar_err_k,
-        ]:
-            cbar.ax.tick_params(
-                axis="x",
-                labelsize=6,
-                colors=axis_color,
-                length=2,
-                width=0.5,
-            )
-
+        for cbar in [cbar_u, cbar_err_u, cbar_k, cbar_err_k]:
+            cbar.ax.tick_params(axis="x", labelsize=6, colors=axis_color, length=2, width=0.5)
             cbar.outline.set_edgecolor(axis_color)
             cbar.outline.set_linewidth(0.5)
 
@@ -2182,54 +1666,19 @@ def evaluate_model_inf(
         # ========================================================
 
         if save_plot:
-
             if plot_path is None:
-
-                os.makedirs(
-                    results_dir,
-                    exist_ok=True,
-                )
-
-                timestamp = (
-                    datetime.now()
-                    .strftime(
-                        "%Y%m%d_%H%M%S"
-                    )
-                )
-
-                plot_path = os.path.join(
-                    results_dir,
-
-                    f"infinite_prediction_"
-                    f"{sampling}_"
-                    f"{timestamp}.png",
-                )
-
+                os.makedirs(results_dir, exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                plot_path = os.path.join(results_dir, f"infinite_prediction_{sampling}_{timestamp}.png")
             else:
-
-                directory = os.path.dirname(
-                    plot_path
-                )
-
+                directory = os.path.dirname(plot_path)
                 if directory:
+                    os.makedirs(directory, exist_ok=True)
 
-                    os.makedirs(
-                        directory,
-                        exist_ok=True,
-                    )
-
-            fig.savefig(
-                plot_path,
-                dpi=300,
-                bbox_inches="tight",
-            )
-
+            fig.savefig(plot_path, dpi=300, bbox_inches="tight")
+            
             if verbose:
-
-                print(
-                    f"Prediction plot saved to: "
-                    f"{plot_path}"
-                )
+                print(f"Prediction plot saved to: {plot_path}")
 
         plt.show()
 
@@ -2238,184 +1687,57 @@ def evaluate_model_inf(
     # ============================================================
 
     if save_results:
+        os.makedirs(results_dir, exist_ok=True)
+        mean_global_error = 0.5 * (err_u_global + err_k_global)
+        mean_outside_error = 0.5 * (err_u_outside + err_k_outside)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"infinite_problem_results_{sampling}_{timestamp}.txt"
+        filepath = os.path.join(results_dir, filename)
 
-        os.makedirs(
-            results_dir,
-            exist_ok=True,
-        )
+        with open(filepath, "w") as f:
+            f.write("Infinite-domain inverse problem (MAE)\n")
+            f.write("=" * 50 + "\n\n")
+            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            f.write(f"Sampling: {sampling}\n\n")
 
-        mean_global_error = 0.5 * (
-            err_u_global
-            +
-            err_k_global
-        )
+            f.write("Training domain\n")
+            f.write(f"x: [{train_xmin}, {train_xmax}]\n")
+            f.write(f"y: [{train_ymin}, {train_ymax}]\n\n")
 
-        mean_outside_error = 0.5 * (
-            err_u_outside
-            +
-            err_k_outside
-        )
+            f.write("Evaluation domain\n")
+            f.write(f"x: [{eval_xmin}, {eval_xmax}]\n")
+            f.write(f"y: [{eval_ymin}, {eval_ymax}]\n\n")
 
-        timestamp = (
-            datetime.now()
-            .strftime(
-                "%Y%m%d_%H%M%S"
-            )
-        )
+            f.write("Global MAE\n")
+            f.write(f"u: {err_u_global:.8e}\n")
+            f.write(f"k: {err_k_global:.8e}\n")
+            f.write(f"Mean: {mean_global_error:.8e}\n\n")
 
-        filename = (
-            f"infinite_problem_results_"
-            f"{sampling}_"
-            f"{timestamp}.txt"
-        )
+            f.write("Inside training domain (MAE)\n")
+            f.write(f"u: {err_u_inside:.8e}\n")
+            f.write(f"k: {err_k_inside:.8e}\n\n")
 
-        filepath = os.path.join(
-            results_dir,
-            filename,
-        )
-
-        with open(
-            filepath,
-            "w",
-        ) as f:
-
-            f.write(
-                "Infinite-domain inverse problem\n"
-            )
-
-            f.write(
-                "=" * 50
-                + "\n\n"
-            )
-
-            f.write(
-                f"Date: "
-                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            )
-
-            f.write(
-                f"Sampling: {sampling}\n\n"
-            )
-
-            # ----------------------------------------------------
-            # Training domain
-            # ----------------------------------------------------
-
-            f.write(
-                "Training domain\n"
-            )
-
-            f.write(
-                f"x: [{train_xmin}, {train_xmax}]\n"
-            )
-
-            f.write(
-                f"y: [{train_ymin}, {train_ymax}]\n\n"
-            )
-
-            # ----------------------------------------------------
-            # Evaluation domain
-            # ----------------------------------------------------
-
-            f.write(
-                "Evaluation domain\n"
-            )
-
-            f.write(
-                f"x: [{eval_xmin}, {eval_xmax}]\n"
-            )
-
-            f.write(
-                f"y: [{eval_ymin}, {eval_ymax}]\n\n"
-            )
-
-            # ----------------------------------------------------
-            # Global errors
-            # ----------------------------------------------------
-
-            f.write(
-                "Global relative L2 errors\n"
-            )
-
-            f.write(
-                f"u: {err_u_global:.8e}\n"
-            )
-
-            f.write(
-                f"k: {err_k_global:.8e}\n"
-            )
-
-            f.write(
-                f"Mean: {mean_global_error:.8e}\n\n"
-            )
-
-            # ----------------------------------------------------
-            # Inside errors
-            # ----------------------------------------------------
-
-            f.write(
-                "Inside training domain\n"
-            )
-
-            f.write(
-                f"u: {err_u_inside:.8e}\n"
-            )
-
-            f.write(
-                f"k: {err_k_inside:.8e}\n\n"
-            )
-
-            # ----------------------------------------------------
-            # Outside errors
-            # ----------------------------------------------------
-
-            f.write(
-                "Outside training domain\n"
-            )
-
-            f.write(
-                f"u: {err_u_outside:.8e}\n"
-            )
-
-            f.write(
-                f"k: {err_k_outside:.8e}\n"
-            )
-
-            f.write(
-                f"Mean: {mean_outside_error:.8e}\n"
-            )
+            f.write("Outside training domain (MAE)\n")
+            f.write(f"u: {err_u_outside:.8e}\n")
+            f.write(f"k: {err_k_outside:.8e}\n")
+            f.write(f"Mean: {mean_outside_error:.8e}\n")
 
         if verbose:
-
-            print(
-                f"Results saved to: "
-                f"{filepath}"
-            )
-
-    # ============================================================
-    # Return
-    # ============================================================
+            print(f"Results saved to: {filepath}")
 
     return {
-
         "err_u_global": err_u_global,
         "err_k_global": err_k_global,
-
         "err_u_inside": err_u_inside,
         "err_k_inside": err_k_inside,
-
         "err_u_outside": err_u_outside,
         "err_k_outside": err_k_outside,
-
         "U_pred": U_pred,
         "K_pred": K_pred,
-
         "error_u": error_u,
         "error_k": error_k,
-
         "X": X,
         "Y": Y,
-
         "outside_mask": outside_mask,
     }
 
