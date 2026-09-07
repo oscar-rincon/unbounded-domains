@@ -10,7 +10,7 @@
    xml:space="preserve"
    inkscape:version="1.4.2 (1:1.4.2+202505120737+ebf0e940d0)"
    sodipodi:docname="analytical_solution_slides_es.svg"
-   inkscape:export-filename="analytical_solution.png"
+   inkscape:export-filename="analytical_solution_slides_es.png"
    inkscape:export-xdpi="300"
    inkscape:export-ydpi="300"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
@@ -1624,12 +1624,6 @@
      inkscape:groupmode="layer"
      id="layer1"
      transform="translate(-13.72341,36.480175)"><rect
-       style="fill:#ffffff;stroke-width:0.248197"
-       id="rect4599"
-       width="160.02"
-       height="111.07691"
-       x="13.72341"
-       y="-36.480175" /><rect
        style="fill:#e5e5e5;stroke-width:0.199999;stroke-miterlimit:3.4;fill-opacity:1"
        id="rect20"
        width="154.89955"
