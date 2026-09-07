@@ -528,28 +528,15 @@ def build_models(
         hidden_layers=hidden_layers,
         hidden_units=hidden_units,
         activation_function=activation,
-    ).to(device)#.double()
-
-    # model_u = MLPWithAlpha(
-    #     input_size=2,
-    #     output_size=1,
-    #     hidden_layers=hidden_layers,
-    #     hidden_units=hidden_units,
-    #     activation_function=activation,
-    #     alpha_init=0.25,
-    # )
-    # model_k = MLP(
-    #     input_size=2,
-    #     output_size=1,
-    #     hidden_layers=hidden_layers,
-    #     hidden_units=hidden_units,
-    #     activation_function=activation,
-    # ).to(device)#.double()
-    model_k = CoefficientNet(
+    ).to(device) 
+ 
+    model_k = MLP(
+        input_size=2,
+        output_size=1,
         hidden_layers=hidden_layers,
         hidden_units=hidden_units,
-        activation=nn.Sigmoid(),
-    ).to(device)#.double()
+        activation_function=nn.Tanh(),
+    ).to(device) 
 
     model_u.apply(init_weights)
     model_k.apply(init_weights)
