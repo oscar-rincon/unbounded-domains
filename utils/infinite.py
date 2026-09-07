@@ -1440,7 +1440,7 @@ def evaluate_model_inf(
         # --------------------------------------------------------
 
         fig = plt.figure(
-            figsize=(3.5, 7.0)
+            figsize=(3.3, 7.0)
         )
 
         gs = fig.add_gridspec(
@@ -1572,7 +1572,7 @@ def evaluate_model_inf(
             len(regions)
         )
 
-        width = 0.47
+        width = 0.48
         u_color = "#2255a080"   # blue
         k_color = "#d6d6d683"   # gray
 
@@ -1641,7 +1641,7 @@ def evaluate_model_inf(
             a.set_xlabel("")
             a.set_ylabel("")
 
-        fig.suptitle(sampling.capitalize(), fontsize=9, y=0.90)
+        fig.suptitle(sampling.capitalize(), fontsize=8, y=0.90)
 
         # Colorbar setups
         cbar_u = fig.colorbar(im_u, ax=ax00, orientation="horizontal", fraction=0.028, pad=0.20, aspect=30)
