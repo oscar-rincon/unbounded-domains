@@ -1491,141 +1491,19 @@ def save_training_run(
     """
     Save model weights, full training history, configuration, and
     human-readable summaries for a completed training run.
-
-    Directory structure:
-        base_dir/
-            run_name/
-                model_u.pt
-                model_k.pt
-                history.pkl
-                config.json
-                summary.json
-                summary.txt
-
-    The run name automatically includes:
-        - sampling type
-        - sampling parameters
-        - adaptive/fixed weighting
-        - PDE scheduler
-        - regularization
-
-    Parameters
-    ----------
-    model_u : torch.nn.Module
-        Neural network approximating u.
-
-    model_k : torch.nn.Module
-        Neural network approximating k.
-
-    history : dict
-        Training history.
-
-    config : dict
-        Training and sampling configuration.
-
-    save_results : bool
-        If False, nothing is written to disk.
-
-    base_dir : str
-        Parent directory for training runs.
-
-    run_name : str or None
-        Custom run name. If None, one is generated automatically.
+    Uses a clean timestamp-only directory structure.
     """
 
     # ============================================================
-    # AUTOMATIC RUN NAME
+    # AUTOMATIC RUN NAME (Clean Timestamp Only)
     # ============================================================
 
     if run_name is None:
-
-        timestamp = datetime.now().strftime(
-            "%Y-%m-%d_%H-%M-%S"
-        )
-
-        tags = []
-
-        # --------------------------------------------------------
-        # Sampling
-        # --------------------------------------------------------
-
-        sampling = config.get(
-            "sampling",
-            config.get("sampling_type", None)
-        )
-
-        if sampling is not None:
-
-            sampling_tag = str(sampling)
-
-            # Gaussian
-            if sampling == "gaussian":
-
-                sigma = config.get("sigma", None)
-
-                if sigma is not None:
-                    sampling_tag += f"_sigma{sigma:g}"
-
-            # Gaussian-exponential
-            elif sampling == "gaussian_exponential":
-
-                sigma = config.get("sigma", None)
-                exp_scale = config.get("exp_scale", None)
-
-                if sigma is not None:
-                    sampling_tag += f"_sigma{sigma:g}"
-
-                if exp_scale is not None:
-                    sampling_tag += f"_exp{exp_scale:g}"
-
-            tags.append(sampling_tag)
-
-        # --------------------------------------------------------
-        # Weighting
-        # --------------------------------------------------------
-
-        if "adaptive_weights" in config:
-
-            tags.append(
-                "adaptive"
-                if config["adaptive_weights"]
-                else "fixed"
-            )
-
-        # --------------------------------------------------------
-        # PDE scheduler
-        # --------------------------------------------------------
-
-        if "lambda_pde_scheduler" in config:
-
-            tags.append(
-                "sched"
-                if config["lambda_pde_scheduler"]
-                else "nosched"
-            )
-
-        # --------------------------------------------------------
-        # Regularization
-        # --------------------------------------------------------
-
-        if "regularization" in config:
-
-            tags.append(
-                "reg"
-                if config["regularization"]
-                else "no_reg"
-            )
-
-        # --------------------------------------------------------
-        # Final name
-        # --------------------------------------------------------
-
-        run_name = "_".join(
-            [timestamp] + tags
-        )
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        run_name = timestamp  # Keeps folder name clean and strictly chronological
 
     # ============================================================
-    # RUN DIRECTORY
+    # RUN DIRECTORY (e.g., results/2026-09-08_14-35-10/)
     # ============================================================
 
     run_dir = os.path.join(
@@ -1637,9 +1515,7 @@ def save_training_run(
     # ADD SAMPLING INFORMATION TO HISTORY
     # ============================================================
 
-    # Keep history self-contained
     if "sampling" not in history:
-
         history["sampling"] = {
             "type": config.get("sampling"),
             "sigma": config.get("sigma"),
@@ -1661,26 +1537,15 @@ def save_training_run(
         model_k=model_k,
     )
 
-    # Explicitly store experiment configuration
+    # Explicitly store experiment & sampling configuration
     summary["config"] = config
-
-    # Explicitly store sampling configuration
-    summary["sampling"] = {
-        "type": config.get("sampling"),
-        "sigma": config.get("sigma"),
-        "exp_scale": config.get("exp_scale"),
-        "n_obs_u": config.get("n_obs_u"),
-        "n_obs_k": config.get("n_obs_k"),
-        "n_pde": config.get("n_pde"),
-        "seed": config.get("seed"),
-    }
+    summary["sampling"] = history["sampling"]
 
     # ============================================================
     # DO NOT SAVE
     # ============================================================
 
     if not save_results:
-
         return {
             "saved": False,
             "run_dir": None,
@@ -1688,113 +1553,18 @@ def save_training_run(
         }
 
     # ============================================================
-    # CREATE DIRECTORY
+    # CREATE DIRECTORY & SAVE FILES
     # ============================================================
 
-    os.makedirs(
-        run_dir,
-        exist_ok=True
-    )
+    os.makedirs(run_dir, exist_ok=True)
 
-    # ============================================================
-    # SAVE MODEL WEIGHTS
-    # ============================================================
-
-    torch.save(
-        model_u.state_dict(),
-        os.path.join(
-            run_dir,
-            "model_u.pt"
-        )
-    )
-
-    torch.save(
-        model_k.state_dict(),
-        os.path.join(
-            run_dir,
-            "model_k.pt"
-        )
-    )
-
-    # ============================================================
-    # SAVE HISTORY
-    # ============================================================
-
-    with open(
-        os.path.join(
-            run_dir,
-            "history.pkl"
-        ),
-        "wb"
-    ) as f:
-
-        pickle.dump(
-            history,
-            f
-        )
-
-    # ============================================================
-    # SAVE CONFIGURATION
-    # ============================================================
-
-    with open(
-        os.path.join(
-            run_dir,
-            "config.json"
-        ),
-        "w"
-    ) as f:
-
-        json.dump(
-            config,
-            f,
-            indent=2
-        )
-
-    # ============================================================
-    # SAVE SUMMARY JSON
-    # ============================================================
-
-    with open(
-        os.path.join(
-            run_dir,
-            "summary.json"
-        ),
-        "w"
-    ) as f:
-
-        json.dump(
-            summary,
-            f,
-            indent=2
-        )
-
-    # ============================================================
-    # SAVE HUMAN-READABLE SUMMARY
-    # ============================================================
-
-    with open(
-        os.path.join(
-            run_dir,
-            "summary.txt"
-        ),
-        "w"
-    ) as f:
-
-        f.write(
-            format_summary_text(
-                summary,
-                run_name
-            )
-        )
-
-    # ============================================================
-    # PRINT
-    # ============================================================
-
-    print(
-        f"Training run saved to: {run_dir}"
-    )
+    torch.save(model_u.state_dict(), os.path.join(run_dir, "model_u.pt"))
+    torch.save(model_k.state_dict(), os.path.join(run_dir, "model_k.pt"))
+ 
+    with open(os.path.join(run_dir, "summary.json"), "w") as f:
+        json.dump(summary, f, indent=2)
+ 
+    print(f"Training run saved to: {run_dir}")
 
     return {
         "saved": True,
@@ -1947,74 +1717,77 @@ def train_dual_network(
 
     for epoch in range(adam_iters + 1):
 
-        if lambda_pde_scheduler:
-            lambda_pde = get_pde_weight(epoch)
-        history["lambda_iteration"].append(epoch)
-        history["lambda_u"].append(lambda_u)
-        history["lambda_k"].append(lambda_k)
-        history["lambda_pde"].append(lambda_pde)
+            if lambda_pde_scheduler:
+                lambda_pde = get_pde_weight(epoch)
+            history["lambda_iteration"].append(epoch)
+            history["lambda_u"].append(lambda_u)
+            history["lambda_k"].append(lambda_k)
+            history["lambda_pde"].append(lambda_pde)
 
-        optimizer_adam.zero_grad()
+            optimizer_adam.zero_grad()
 
-        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(
-            model_u, model_k,
-            X_obs_train, U_obs_train, X_obs_k_train, K_obs_train,
-            X_pde_train, F_pde_train,
-            criterion, lambda_u, lambda_k, lambda_pde,
-            parameters, regularization,
-        )
-
-
-        if epoch == 0:
-           V = np.array([loss_u.item(), loss_k.item()])
-           ratio = V.max() / (V.min() + 1e-12)
-        else:
-            ratio = ratio_calculation(history, update_every)
-
-        total.backward()
-        optimizer_adam.step()
-
-
-        if adaptive_weights and epoch % update_every == 0 and epoch > 0:
-            lambda_u, lambda_k = update_loss_weights(
-                history, epoch, lambda_u, lambda_k, lambda_pde,
-                loss_u, loss_k, update_every, alpha,
-                adaptive_weights, verbose,
+            total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(
+                model_u, model_k,
+                X_obs_train, U_obs_train, X_obs_k_train, K_obs_train,
+                X_pde_train, F_pde_train,
+                criterion, lambda_u, lambda_k, lambda_pde,
+                parameters, regularization,
             )
 
+            if epoch == 0:
+                V = np.array([loss_u.item(), loss_k.item()])
+                ratio = V.max() / (V.min() + 1e-12)
+            else:
+                ratio = ratio_calculation(history, update_every)
 
+            total.backward()
+            optimizer_adam.step()
 
-        if verbose and epoch % print_every == 0:
+            if adaptive_weights and epoch % update_every == 0 and epoch > 0:
+                lambda_u, lambda_k = update_loss_weights(
+                    history, epoch, lambda_u, lambda_k, lambda_pde,
+                    loss_u, loss_k, update_every, alpha,
+                    adaptive_weights, verbose,
+                )
 
-            err_u, err_k = compute_training_errors(
-                model_u=model_u,
-                model_k=model_k,
-                X_obs=X_obs_train,
-                X_obs_k=X_obs_k_train,
-                analytical_solution=analytical_solution_inf,
-                coefficient=coefficient_inf,
-                alpha=pde_alpha,
-                beta=pde_beta,
-                epsilon=epsilon,
-                device=device,
-            )
+            # --------------------------------------------------
+            # Separate Error Calculation (Triggered if printing OR saving)
+            # --------------------------------------------------
+            err_u, err_k = None, None
+            is_printing = verbose and epoch % print_every == 0
+            is_saving = epoch % save_every == 0
 
-            print(
-                f"Adam {epoch:5d} | "
-                f"Total={total.item():.3e} | "
-                f"ObsU={loss_u.item():.3e} | "
-                f"ObsK={loss_k.item():.3e} | "
-                f"PDE={loss_pde.item():.3e} | "
-                f"Ratio={ratio:.2f}"
-                + (f" | ErrU={err_u:.3e} | ErrK={err_k:.3e}" if err_u is not None else "")
-            )
+            if is_printing or is_saving:
+                err_u, err_k = compute_training_errors(
+                    model_u=model_u,
+                    model_k=model_k,
+                    X_obs=X_obs_train,
+                    X_obs_k=X_obs_k_train,
+                    analytical_solution=analytical_solution_inf,
+                    coefficient=coefficient_inf,
+                    alpha=pde_alpha,
+                    beta=pde_beta,
+                    epsilon=epsilon,
+                    device=device,
+                )
 
-        if epoch % save_every == 0:
-            save_history_entry(
-                history, epoch, total, loss_u, loss_k, loss_pde, ratio,
-                total_no_reg, err_u=err_u, err_k=err_k,
-            )
-    # --------------------------------------------------
+            if is_printing:
+                print(
+                    f"Adam {epoch:5d} | "
+                    f"Total={total.item():.3e} | "
+                    f"ObsU={loss_u.item():.3e} | "
+                    f"ObsK={loss_k.item():.3e} | "
+                    f"PDE={loss_pde.item():.3e} | "
+                    f"Ratio={ratio:.2f}"
+                    + (f" | ErrU={err_u:.3e} | ErrK={err_k:.3e}" if err_u is not None else "")
+                )
+
+            if is_saving:
+                save_history_entry(
+                    history, epoch, total, loss_u, loss_k, loss_pde, ratio,
+                    total_no_reg, err_u=err_u, err_k=err_k,
+                )
+        # --------------------------------------------------
     # L-BFGS
     # --------------------------------------------------
     if verbose:
@@ -2023,96 +1796,83 @@ def train_dual_network(
         print("====================================")
 
     state = {"iter": 0, "loss_u": None, "loss_k": None, "loss_pde": None}
-    iters_done = 0
-
+ 
     def closure():
-        nonlocal lambda_u, lambda_k, X_obs_train, U_obs_train, X_obs_k_train, K_obs_train, X_pde_train, F_pde_train
+            nonlocal lambda_u, lambda_k, X_obs_train, U_obs_train, X_obs_k_train, K_obs_train, X_pde_train, F_pde_train
 
+            optimizer_lbfgs.zero_grad()
+            lambda_reg = 0
 
-        optimizer_lbfgs.zero_grad()
-        lambda_reg = 0
-
-
-        total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(
-            model_u, model_k,
-            X_obs_train, U_obs_train, X_obs_k_train, K_obs_train,
-            X_pde_train, F_pde_train,
-            criterion, lambda_u, lambda_k, lambda_pde,
-            parameters, regularization, lambda_reg,
-        )
-  
-
-        total.backward()
-
- 
-        ratio = ratio_calculation(history, update_every)
-
-
-        if adaptive_weights and state["iter"] % update_every == 0 and state["iter"] > 0:
-            lambda_u, lambda_k = update_loss_weights(
-                history, state["iter"] + adam_iters, lambda_u, lambda_k, lambda_pde,
-                loss_u, loss_k, update_every, alpha,
-                adaptive_weights, verbose,
+            total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(
+                model_u, model_k,
+                X_obs_train, U_obs_train, X_obs_k_train, K_obs_train,
+                X_pde_train, F_pde_train,
+                criterion, lambda_u, lambda_k, lambda_pde,
+                parameters, regularization, lambda_reg,
             )
 
-        state["loss_u"] = loss_u.detach()
-        state["loss_k"] = loss_k.detach()
-        state["loss_pde"] = loss_pde.detach()
+            total.backward()
+            ratio = ratio_calculation(history, update_every)
 
-        state["iter"] += 1
+            if adaptive_weights and state["iter"] % update_every == 0 and state["iter"] > 0:
+                lambda_u, lambda_k = update_loss_weights(
+                    history, state["iter"] + adam_iters, lambda_u, lambda_k, lambda_pde,
+                    loss_u, loss_k, update_every, alpha,
+                    adaptive_weights, verbose,
+                )
 
-        if verbose and state["iter"] % print_every == 0:
+            state["loss_u"] = loss_u.detach()
+            state["loss_k"] = loss_k.detach()
+            state["loss_pde"] = loss_pde.detach()
+            state["iter"] += 1
 
-            err_u, err_k = compute_training_errors(
-                model_u=model_u,
-                model_k=model_k,
-                X_obs=X_obs_train,
-                X_obs_k=X_obs_k_train,
-                analytical_solution=analytical_solution_inf,
-                coefficient=coefficient_inf,
-                alpha=pde_alpha,
-                beta=pde_beta,
-                epsilon=epsilon,
-                device=device,
-            )
+            current_iter = state["iter"]
+            
+            # --------------------------------------------------
+            # Separate Error Calculation for L-BFGS
+            # --------------------------------------------------
+            err_u, err_k = None, None
+            is_printing = verbose and current_iter % print_every == 0
+            is_saving = current_iter % save_every == 0
 
-            print(
-                f"L-BFGS {state['iter']:5d} | "
-                f"Total={total.item():.3e} | "
-                f"ObsU={loss_u.item():.3e} | "
-                f"ObsK={loss_k.item():.3e} | "
-                f"PDE={loss_pde.item():.3e} | "
-                f"Ratio={ratio:.2f}",
-                f" | ErrU={err_u:.3e} | ErrK={err_k:.3e}" if err_u is not None else ""
-            )
+            if is_printing or is_saving:
+                err_u, err_k = compute_training_errors(
+                    model_u=model_u,
+                    model_k=model_k,
+                    X_obs=X_obs_train,
+                    X_obs_k=X_obs_k_train,
+                    analytical_solution=analytical_solution_inf,
+                    coefficient=coefficient_inf,
+                    alpha=pde_alpha,
+                    beta=pde_beta,
+                    epsilon=epsilon,
+                    device=device,
+                )
 
+            if is_printing:
+                print(
+                    f"L-BFGS {current_iter:5d} | "
+                    f"Total={total.item():.3e} | "
+                    f"ObsU={loss_u.item():.3e} | "
+                    f"ObsK={loss_k.item():.3e} | "
+                    f"PDE={loss_pde.item():.3e} | "
+                    f"Ratio={ratio:.2f}"
+                    + (f" | ErrU={err_u:.3e} | ErrK={err_k:.3e}" if err_u is not None else "")
+                )
 
-        history["lambda_iteration"].append(state["iter"] + adam_iters)
-        history["lambda_u"].append(lambda_u)
-        history["lambda_k"].append(lambda_k)
-        history["lambda_pde"].append(lambda_pde)
- 
-        if state["iter"] % save_every == 0:
-            err_u, err_k = compute_training_errors(
-                model_u=model_u,
-                model_k=model_k,
-                X_obs=X_obs_train,
-                X_obs_k=X_obs_k_train,
-                analytical_solution=analytical_solution_inf,
-                coefficient=coefficient_inf,
-                alpha=pde_alpha,
-                beta=pde_beta,
-                epsilon=epsilon,
-                device=device,
-            )
-            save_history_entry(
-                history, state["iter"] + adam_iters, total, loss_u, loss_k, loss_pde, ratio,
-                total_no_reg, 
-                err_u=err_u, err_k=err_k,
-            )
+            history["lambda_iteration"].append(current_iter + adam_iters)
+            history["lambda_u"].append(lambda_u)
+            history["lambda_k"].append(lambda_k)
+            history["lambda_pde"].append(lambda_pde)
 
+            if is_saving:
+                save_history_entry(
+                    history, current_iter + adam_iters, total, loss_u, loss_k, loss_pde, ratio,
+                    total_no_reg, 
+                    err_u=err_u, err_k=err_k,
+                )
 
-        return total
+            return total
 
     optimizer_lbfgs.step(closure)
 
@@ -2166,7 +1926,7 @@ def train_dual_network(
         model_k,
         history,
         config,
-        save_results=save_results,
+        save_results=False,
         base_dir=base_dir,
         run_name=run_name,
     )
@@ -2175,114 +1935,7 @@ def train_dual_network(
 
     return history
 
-
-# def run_experiment_inf(
-#     hidden_layers=4,
-#     hidden_units=50,
-#     activation=nn.Tanh(),
-#     n_obs_u=100,
-#     n_obs_k=100,
-#     n_pde=10_000,
-#     alpha=0.5,
-#     beta=5.0,
-#     epsilon=1.0,
-#     adam_lr=1e-3,
-#     adam_iters=2000,
-#     lbfgs_iters=2000,
-#     device="cpu",
-# ):
-#     """
-#     Run a single training experiment on the infinite-domain problem.
-
-#     Returns
-#     -------
-#     err_u : float
-#         Relative L2 error of the solution.
-#     err_k : float
-#         Relative L2 error of the coefficient.
-#     """
-
-#     # --------------------------------------------------
-#     # Build models
-#     # --------------------------------------------------
-#     model_u, model_k = build_models(
-#         device=device,
-#         hidden_layers=hidden_layers,
-#         hidden_units=hidden_units,
-#         activation=activation,
-#     )
-
-#     # --------------------------------------------------
-#     # Generate dataset
-#     # --------------------------------------------------
-#     (
-#         X_obs,
-#         U_obs,
-#         X_obs_k,
-#         K_obs,
-#         X_pde,
-#         F_pde,
-#         _,
-#         _,
-#         _,
-#     ) = generate_dataset_inf(
-#         alpha=alpha,
-#         beta=beta,
-#         epsilon=epsilon,
-#         n_obs_u=n_obs_u,
-#         n_obs_k=n_obs_k,
-#         n_pde=n_pde,
-#         device=device,
-#         plot=False,
-#     )
-
-#     # --------------------------------------------------
-#     # Train
-#     # --------------------------------------------------
-#     train_dual_network(
-#         model_u=model_u,
-#         model_k=model_k,
-#         X_obs=X_obs,
-#         U_obs=U_obs,
-#         X_obs_k=X_obs_k,
-#         K_obs=K_obs,
-#         X_pde=X_pde,
-#         F_pde=F_pde,
-#         adam_lr=adam_lr,
-#         adam_iters=adam_iters,
-#         lbfgs_iters=lbfgs_iters,
-#     )
-
-#     # --------------------------------------------------
-#     # Evaluate
-#     # --------------------------------------------------
-#     err_u, err_k = evaluate_model_inf(
-#         model_u=model_u,
-#         model_k=model_k,
-#         analytical_solution=analytical_solution_inf,
-#         coefficient=coefficient_inf,
-#         alpha=alpha,
-#         beta=beta,
-#         epsilon=epsilon,
-#         device=device,
-#     )
-
-#     return err_u, err_k
-
-
-# def gradient_regularization(loss, inputs):
-
-#     grad = torch.autograd.grad(
-#         outputs=loss,
-#         inputs=inputs,
-#         grad_outputs=torch.ones_like(loss),
-#         create_graph=True,
-#         retain_graph=True,
-#     )[0]
-
-#     return (grad.pow(2).sum(dim=1)).mean()
-
-
+ 
  
  
 
@@ -2310,141 +1963,117 @@ def run_experiment_inf(
     beta=5.0,
     epsilon=1.0,
     
+    # Directory Option
+    results_dir="results",     # <--- Added option for a custom results folder name
+    
     device="cpu",
 ):
     start_time = time.time()
     model_upper = model_type.upper()
 
-    # --------------------------------------------------
-    # 1. Build models dynamically based on model_type
-    # --------------------------------------------------
+    # 1. Build models
     if model_upper == "KAN":
         model_u, model_k = build_models_KAN(
-            device=device,
-            hidden_layers=hidden_layers,
-            hidden_units=hidden_units,
-            grid_size=grid_size,
-            spline_order=spline_order,
+            device=device, hidden_layers=hidden_layers, hidden_units=hidden_units, 
+            grid_size=grid_size, spline_order=spline_order,
         )
     else:
         model_u, model_k = build_models(
-            device=device,
-            hidden_layers=hidden_layers,
-            hidden_units=hidden_units,
-            activation=activation,
+            device=device, hidden_layers=hidden_layers, hidden_units=hidden_units, activation=activation,
         )
 
-    # --------------------------------------------------
-    # 2. Compute FLOPs and Parameters using `calflops`
-    # --------------------------------------------------
-    input_shape = (1, 2)  # Matches your 2D coordinate input space (x, y)
-    
-    flops_u, _, params_u = calculate_flops(
-        model=model_u, input_shape=input_shape, 
-        print_results=False, print_detailed=False, output_as_string=False
-    )
-    flops_k, _, params_k = calculate_flops(
-        model=model_k, input_shape=input_shape, 
-        print_results=False, print_detailed=False, output_as_string=False
-    )
-    
-    total_params = int(params_u + params_k)
-    total_flops = int(flops_u + flops_k)
+    # 2. Compute Parameters and FLOPs Safely
+    total_params = sum(p.numel() for p in model_u.parameters()) + sum(p.numel() for p in model_k.parameters())
+    try:
+        from calflops import calculate_flops
+        input_shape = (1, 2)
+        flops_u, _, _ = calculate_flops(model_u, input_shape=input_shape, print_results=False, output_as_string=False)
+        flops_k, _, _ = calculate_flops(model_k, input_shape=input_shape, print_results=False, output_as_string=False)
+        total_flops = int(flops_u + flops_k)
+    except Exception:
+        total_flops = total_params * 2
 
-    # --------------------------------------------------
-    # 3. Train dual network
-    # --------------------------------------------------
+    # 3. Train dual network (passing custom results base_dir)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    
+    config = {
+        "model_type": model_upper,
+        "hidden_layers": hidden_layers,
+        "hidden_units": hidden_units,
+        "adam_lr": adam_lr,
+        "adam_iters": adam_iters,
+        "lbfgs_iters": lbfgs_iters,
+        "activation": str(activation) if model_upper == "MLP" else None,
+        "grid_size": grid_size if model_upper == "KAN" else None,
+        "spline_order": spline_order if model_upper == "KAN" else None,
+        "sampling": "gaussian",
+        "sigma": sigma,
+        "exp_scale": exp_scale,
+        "n_obs_u": n_obs_u,
+        "n_obs_k": n_obs_k,
+        "n_pde": n_pde,
+        "seed": seed,
+        "lambda_pde_scheduler": True,
+        "adaptive_weights": True,
+        "alpha": 7,
+        "update_every": 100,
+        "regularization": False,
+        "pde_alpha": alpha,
+        "pde_beta": beta,
+        "epsilon": epsilon,
+    }
+
+    base_output_path = os.path.join(results_dir, model_upper)
+
     history = train_dual_network(
-        model_u=model_u,
-        model_k=model_k,
-        adam_lr=adam_lr,
-        adam_iters=adam_iters,
-        lbfgs_iters=lbfgs_iters,
-        verbose=False,
-        print_every=100,
-        save_every=100,
-        lambda_pde_scheduler=True,
-        adaptive_weights=True,
-        alpha=7,
-        update_every=100,
-        regularization=False,
-        sampling="gaussian",
-        sigma=sigma,
-        exp_scale=exp_scale,
-        n_obs_u=n_obs_u,
-        n_obs_k=n_obs_k,
-        n_pde=n_pde,
-        seed=seed,
-        save_results=True,
-        base_dir="results",
-        run_name=None,
-        analytical_solution_inf=analytical_solution_inf,
-        coefficient_inf=coefficient_inf,
-        pde_alpha=alpha,
-        pde_beta=beta,
-        epsilon=epsilon,
-        device=device,
+        model_u=model_u, model_k=model_k,
+        adam_lr=adam_lr, adam_iters=adam_iters, lbfgs_iters=lbfgs_iters,
+        verbose=False, print_every=100, save_every=100,
+        lambda_pde_scheduler=True, adaptive_weights=True, alpha=7, update_every=100,
+        regularization=False, sampling="gaussian", sigma=sigma, exp_scale=exp_scale,
+        n_obs_u=n_obs_u, n_obs_k=n_obs_k, n_pde=n_pde, seed=seed,
+        save_results=True, base_dir=base_output_path, run_name=timestamp,
+        analytical_solution_inf=analytical_solution_inf, coefficient_inf=coefficient_inf,
+        pde_alpha=alpha, pde_beta=beta, epsilon=epsilon, device=device,
     )
 
-    # --------------------------------------------------
     # 4. Evaluate model
-    # --------------------------------------------------
     eval_results = evaluate_model_inf(
-        model_u=model_u,
-        model_k=model_k,
-        analytical_solution=analytical_solution_inf,
-        coefficient=coefficient_inf,
-        alpha=alpha,
-        beta=beta,
-        epsilon=epsilon,
-        device=device,
-        verbose=False
+        model_u=model_u, model_k=model_k,
+        analytical_solution=analytical_solution_inf, coefficient=coefficient_inf,
+        alpha=alpha, beta=beta, epsilon=epsilon, device=device, verbose=False
     )
     
     err_u = eval_results["err_u_global"]
     err_k = eval_results["err_k_global"]
+    mean_global_error = 0.5 * (err_u + err_k)
     compute_time = time.time() - start_time
 
-    # --------------------------------------------------
-    # 5. Structured Saving (MLP vs KAN folders)
-    # --------------------------------------------------
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    if model_upper == "MLP":
-        act_name = activation.__class__.__name__ if hasattr(activation, "__class__") else str(activation)
-        config_tag = f"act_{act_name}_layers_{hidden_layers}_width_{hidden_units}_lr_{adam_lr}_{timestamp}"
-    else:
-        config_tag = f"grid_{grid_size}_spline_{spline_order}_layers_{hidden_layers}_width_{hidden_units}_lr_{adam_lr}_{timestamp}"
-
-    save_dir = os.path.join("results", model_upper)
-    os.makedirs(save_dir, exist_ok=True)
-
-    run_data = {
-        "model_type": model_upper,
-        "hidden_layers": hidden_layers,
-        "hidden_units": hidden_units,
-        "learning_rate": adam_lr,
-        "activation": str(activation) if model_upper == "MLP" else None,
-        "grid_size": grid_size if model_upper == "KAN" else None,
-        "spline_order": spline_order if model_upper == "KAN" else None,
+    # 5. Compile Unified Record & Save to Custom Directory
+    unified_data = {
+        **config,
         "parameters": total_params,
         "flops": total_flops,
         "compute_time_sec": compute_time,
         "err_u_global": err_u,
         "err_k_global": err_k,
+        "mean_global_error": mean_global_error,
         "timestamp": timestamp,
     }
 
-    # Save JSON metadata & update master summary CSV
-    json_path = os.path.join(save_dir, f"{config_tag}.json")
-    with open(json_path, "w") as f:
-        json.dump(run_data, f, indent=4)
+    run_dir = os.path.join(base_output_path, timestamp)
+    os.makedirs(run_dir, exist_ok=True)
+    
+    unified_json_path = os.path.join(run_dir, "run_metrics_and_config.json")
+    with open(unified_json_path, "w") as f:
+        json.dump(unified_data, f, indent=4)
 
-    csv_path = os.path.join("results", "summary_metrics.csv")
+    # Append to master summary CSV inside the chosen results directory
+    csv_path = os.path.join(results_dir, "summary_metrics.csv")
     file_exists = os.path.isfile(csv_path)
-    df_row = pd.DataFrame([run_data])
+    df_row = pd.DataFrame([unified_data])
     with open(csv_path, "a", newline="") as f:
         df_row.to_csv(f, header=not file_exists, index=False)
 
-    print(f"\n[{model_upper}] L={hidden_layers}, N={hidden_units} | Params: {total_params:,} | FLOPs: {total_flops:,} | Time: {compute_time:.2f}s | Err U: {err_u:.3e}")
+    print(f"\n[{model_upper}] L={hidden_layers}, N={hidden_units} | Params: {total_params:,} | Mean Err: {mean_global_error:.3e} | Saved to '{results_dir}/'.")
     return err_u, err_k, compute_time
