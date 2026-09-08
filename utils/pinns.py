@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import pickle
+from calflops import calculate_flops
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -496,25 +497,18 @@ def build_models_KAN(
         layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
         grid_size=grid_size,
         spline_order=spline_order,
-        grid_range=[-5,5],
+        grid_range=[-5, 5],
     ).to(device)
-
-    # model_u = KANWithAlpha(
-    #     hidden_layers=hidden_layers,
-    #     hidden_units=hidden_units,
-    #     grid_size=grid_size,
-    #     spline_order=spline_order,
-    #     alpha_init=alpha_init,
-    # ).to(device)
 
     model_k = KAN(
         layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
         grid_size=grid_size,
         spline_order=spline_order,
-        grid_range=[-5,5],
+        grid_range=[-5, 5],
     ).to(device)
 
     return model_u, model_k 
+
 
 def build_models(
     device,
@@ -1893,7 +1887,7 @@ def train_dual_network(
         n_obs_u=sampling_config["n_obs_u"],
         n_obs_k=sampling_config["n_obs_k"],
         n_pde=sampling_config["n_pde"],
-        plot=True,
+        plot=False,
         device=device,
         seed=sampling_config["seed"],
     )
@@ -2182,87 +2176,220 @@ def train_dual_network(
     return history
 
 
+# def run_experiment_inf(
+#     hidden_layers=4,
+#     hidden_units=50,
+#     activation=nn.Tanh(),
+#     n_obs_u=100,
+#     n_obs_k=100,
+#     n_pde=10_000,
+#     alpha=0.5,
+#     beta=5.0,
+#     epsilon=1.0,
+#     adam_lr=1e-3,
+#     adam_iters=2000,
+#     lbfgs_iters=2000,
+#     device="cpu",
+# ):
+#     """
+#     Run a single training experiment on the infinite-domain problem.
+
+#     Returns
+#     -------
+#     err_u : float
+#         Relative L2 error of the solution.
+#     err_k : float
+#         Relative L2 error of the coefficient.
+#     """
+
+#     # --------------------------------------------------
+#     # Build models
+#     # --------------------------------------------------
+#     model_u, model_k = build_models(
+#         device=device,
+#         hidden_layers=hidden_layers,
+#         hidden_units=hidden_units,
+#         activation=activation,
+#     )
+
+#     # --------------------------------------------------
+#     # Generate dataset
+#     # --------------------------------------------------
+#     (
+#         X_obs,
+#         U_obs,
+#         X_obs_k,
+#         K_obs,
+#         X_pde,
+#         F_pde,
+#         _,
+#         _,
+#         _,
+#     ) = generate_dataset_inf(
+#         alpha=alpha,
+#         beta=beta,
+#         epsilon=epsilon,
+#         n_obs_u=n_obs_u,
+#         n_obs_k=n_obs_k,
+#         n_pde=n_pde,
+#         device=device,
+#         plot=False,
+#     )
+
+#     # --------------------------------------------------
+#     # Train
+#     # --------------------------------------------------
+#     train_dual_network(
+#         model_u=model_u,
+#         model_k=model_k,
+#         X_obs=X_obs,
+#         U_obs=U_obs,
+#         X_obs_k=X_obs_k,
+#         K_obs=K_obs,
+#         X_pde=X_pde,
+#         F_pde=F_pde,
+#         adam_lr=adam_lr,
+#         adam_iters=adam_iters,
+#         lbfgs_iters=lbfgs_iters,
+#     )
+
+#     # --------------------------------------------------
+#     # Evaluate
+#     # --------------------------------------------------
+#     err_u, err_k = evaluate_model_inf(
+#         model_u=model_u,
+#         model_k=model_k,
+#         analytical_solution=analytical_solution_inf,
+#         coefficient=coefficient_inf,
+#         alpha=alpha,
+#         beta=beta,
+#         epsilon=epsilon,
+#         device=device,
+#     )
+
+#     return err_u, err_k
+
+
+# def gradient_regularization(loss, inputs):
+
+#     grad = torch.autograd.grad(
+#         outputs=loss,
+#         inputs=inputs,
+#         grad_outputs=torch.ones_like(loss),
+#         create_graph=True,
+#         retain_graph=True,
+#     )[0]
+
+#     return (grad.pow(2).sum(dim=1)).mean()
+
+
+ 
+ 
+
 def run_experiment_inf(
-    hidden_layers=4,
-    hidden_units=50,
-    activation=nn.Tanh(),
-    n_obs_u=100,
-    n_obs_k=100,
-    n_pde=10_000,
-    alpha=0.5,
-    beta=5.0,
-    epsilon=1.0,
+    model_type="MLP",          # "MLP" or "KAN"
+    hidden_layers=3,
+    hidden_units=25,           
+    activation=nn.Tanh(),      # Used if model_type == "MLP"
+    grid_size=5,               # Used if model_type == "KAN"
+    spline_order=3,            # Used if model_type == "KAN"
+    
+    # Training / Sampling arguments
     adam_lr=1e-3,
     adam_iters=2000,
     lbfgs_iters=2000,
+    sigma=5.5,
+    exp_scale=1.0,
+    n_obs_u=100,
+    n_obs_k=100,
+    n_pde=1000,
+    seed=2,
+    
+    # PDE Parameters
+    alpha=0.5,
+    beta=5.0,
+    epsilon=1.0,
+    
     device="cpu",
 ):
-    """
-    Run a single training experiment on the infinite-domain problem.
-
-    Returns
-    -------
-    err_u : float
-        Relative L2 error of the solution.
-    err_k : float
-        Relative L2 error of the coefficient.
-    """
+    start_time = time.time()
+    model_upper = model_type.upper()
 
     # --------------------------------------------------
-    # Build models
+    # 1. Build models dynamically based on model_type
     # --------------------------------------------------
-    model_u, model_k = build_models(
-        device=device,
-        hidden_layers=hidden_layers,
-        hidden_units=hidden_units,
-        activation=activation,
+    if model_upper == "KAN":
+        model_u, model_k = build_models_KAN(
+            device=device,
+            hidden_layers=hidden_layers,
+            hidden_units=hidden_units,
+            grid_size=grid_size,
+            spline_order=spline_order,
+        )
+    else:
+        model_u, model_k = build_models(
+            device=device,
+            hidden_layers=hidden_layers,
+            hidden_units=hidden_units,
+            activation=activation,
+        )
+
+    # --------------------------------------------------
+    # 2. Compute FLOPs and Parameters using `calflops`
+    # --------------------------------------------------
+    input_shape = (1, 2)  # Matches your 2D coordinate input space (x, y)
+    
+    flops_u, _, params_u = calculate_flops(
+        model=model_u, input_shape=input_shape, 
+        print_results=False, print_detailed=False, output_as_string=False
     )
-
-    # --------------------------------------------------
-    # Generate dataset
-    # --------------------------------------------------
-    (
-        X_obs,
-        U_obs,
-        X_obs_k,
-        K_obs,
-        X_pde,
-        F_pde,
-        _,
-        _,
-        _,
-    ) = generate_dataset_inf(
-        alpha=alpha,
-        beta=beta,
-        epsilon=epsilon,
-        n_obs_u=n_obs_u,
-        n_obs_k=n_obs_k,
-        n_pde=n_pde,
-        device=device,
-        plot=False,
+    flops_k, _, params_k = calculate_flops(
+        model=model_k, input_shape=input_shape, 
+        print_results=False, print_detailed=False, output_as_string=False
     )
+    
+    total_params = int(params_u + params_k)
+    total_flops = int(flops_u + flops_k)
 
     # --------------------------------------------------
-    # Train
+    # 3. Train dual network
     # --------------------------------------------------
-    train_dual_network(
+    history = train_dual_network(
         model_u=model_u,
         model_k=model_k,
-        X_obs=X_obs,
-        U_obs=U_obs,
-        X_obs_k=X_obs_k,
-        K_obs=K_obs,
-        X_pde=X_pde,
-        F_pde=F_pde,
         adam_lr=adam_lr,
         adam_iters=adam_iters,
         lbfgs_iters=lbfgs_iters,
+        verbose=False,
+        print_every=100,
+        save_every=100,
+        lambda_pde_scheduler=True,
+        adaptive_weights=True,
+        alpha=7,
+        update_every=100,
+        regularization=False,
+        sampling="gaussian",
+        sigma=sigma,
+        exp_scale=exp_scale,
+        n_obs_u=n_obs_u,
+        n_obs_k=n_obs_k,
+        n_pde=n_pde,
+        seed=seed,
+        save_results=True,
+        base_dir="results",
+        run_name=None,
+        analytical_solution_inf=analytical_solution_inf,
+        coefficient_inf=coefficient_inf,
+        pde_alpha=alpha,
+        pde_beta=beta,
+        epsilon=epsilon,
+        device=device,
     )
 
     # --------------------------------------------------
-    # Evaluate
+    # 4. Evaluate model
     # --------------------------------------------------
-    err_u, err_k = evaluate_model_inf(
+    eval_results = evaluate_model_inf(
         model_u=model_u,
         model_k=model_k,
         analytical_solution=analytical_solution_inf,
@@ -2271,19 +2398,53 @@ def run_experiment_inf(
         beta=beta,
         epsilon=epsilon,
         device=device,
+        verbose=False
     )
+    
+    err_u = eval_results["err_u_global"]
+    err_k = eval_results["err_k_global"]
+    compute_time = time.time() - start_time
 
-    return err_u, err_k
+    # --------------------------------------------------
+    # 5. Structured Saving (MLP vs KAN folders)
+    # --------------------------------------------------
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    if model_upper == "MLP":
+        act_name = activation.__class__.__name__ if hasattr(activation, "__class__") else str(activation)
+        config_tag = f"act_{act_name}_layers_{hidden_layers}_width_{hidden_units}_lr_{adam_lr}_{timestamp}"
+    else:
+        config_tag = f"grid_{grid_size}_spline_{spline_order}_layers_{hidden_layers}_width_{hidden_units}_lr_{adam_lr}_{timestamp}"
 
-def gradient_regularization(loss, inputs):
+    save_dir = os.path.join("results", model_upper)
+    os.makedirs(save_dir, exist_ok=True)
 
-    grad = torch.autograd.grad(
-        outputs=loss,
-        inputs=inputs,
-        grad_outputs=torch.ones_like(loss),
-        create_graph=True,
-        retain_graph=True,
-    )[0]
+    run_data = {
+        "model_type": model_upper,
+        "hidden_layers": hidden_layers,
+        "hidden_units": hidden_units,
+        "learning_rate": adam_lr,
+        "activation": str(activation) if model_upper == "MLP" else None,
+        "grid_size": grid_size if model_upper == "KAN" else None,
+        "spline_order": spline_order if model_upper == "KAN" else None,
+        "parameters": total_params,
+        "flops": total_flops,
+        "compute_time_sec": compute_time,
+        "err_u_global": err_u,
+        "err_k_global": err_k,
+        "timestamp": timestamp,
+    }
 
-    return (grad.pow(2).sum(dim=1)).mean()
+    # Save JSON metadata & update master summary CSV
+    json_path = os.path.join(save_dir, f"{config_tag}.json")
+    with open(json_path, "w") as f:
+        json.dump(run_data, f, indent=4)
+
+    csv_path = os.path.join("results", "summary_metrics.csv")
+    file_exists = os.path.isfile(csv_path)
+    df_row = pd.DataFrame([run_data])
+    with open(csv_path, "a", newline="") as f:
+        df_row.to_csv(f, header=not file_exists, index=False)
+
+    print(f"\n[{model_upper}] L={hidden_layers}, N={hidden_units} | Params: {total_params:,} | FLOPs: {total_flops:,} | Time: {compute_time:.2f}s | Err U: {err_u:.3e}")
+    return err_u, err_k, compute_time

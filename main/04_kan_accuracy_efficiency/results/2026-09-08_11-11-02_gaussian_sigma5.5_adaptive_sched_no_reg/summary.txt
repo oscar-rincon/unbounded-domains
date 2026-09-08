@@ -1,0 +1,78 @@
+Training run: 2026-09-08_11-11-02_gaussian_sigma5.5_adaptive_sched_no_reg
+========================================
+
+Config:
+  adam_lr: 1.000000e-03
+  adam_iters: 1.000000e+02
+  lbfgs_iters: 1.000000e+02
+  print_every: 1.000000e+02
+  save_every: 1.000000e+02
+  lambda_pde_scheduler: True
+  adaptive_weights: True
+  alpha: 7.000000e+00
+  update_every: 1.000000e+02
+  regularization: False
+  sampling: gaussian
+  sigma: 5.500000e+00
+  exp_scale: 1.000000e+00
+  n_obs_u: 1.000000e+02
+  n_obs_k: 1.000000e+02
+  n_pde: 1.000000e+03
+  seed: 2.000000e+00
+  pde_alpha: 5.000000e-01
+  pde_beta: 5.000000e+00
+  epsilon: 1.000000e+00
+
+Model u (displacement network):
+  class: MLP
+  total params: 2,051
+  trainable params: 2,051
+  layers:
+    - linear_in: Linear (2 -> 25), bias=True
+    - linear_out: Linear (25 -> 1), bias=True
+    - layers.0: Linear (25 -> 25), bias=True
+    - layers.1: Linear (25 -> 25), bias=True
+    - layers.2: Linear (25 -> 25), bias=True
+    - act: Tanh
+  full architecture:
+    MLP(
+      (linear_in): Linear(in_features=2, out_features=25, bias=True)
+      (linear_out): Linear(in_features=25, out_features=1, bias=True)
+      (layers): ModuleList(
+        (0-2): 3 x Linear(in_features=25, out_features=25, bias=True)
+      )
+      (act): Tanh()
+    )
+
+Model k (parameter network):
+  class: MLP
+  total params: 2,051
+  trainable params: 2,051
+  layers:
+    - linear_in: Linear (2 -> 25), bias=True
+    - linear_out: Linear (25 -> 1), bias=True
+    - layers.0: Linear (25 -> 25), bias=True
+    - layers.1: Linear (25 -> 25), bias=True
+    - layers.2: Linear (25 -> 25), bias=True
+    - act: Tanh
+  full architecture:
+    MLP(
+      (linear_in): Linear(in_features=2, out_features=25, bias=True)
+      (linear_out): Linear(in_features=25, out_features=1, bias=True)
+      (layers): ModuleList(
+        (0-2): 3 x Linear(in_features=25, out_features=25, bias=True)
+      )
+      (act): Tanh()
+    )
+
+Final losses (last logged step):
+  total: 1.054661e+00
+  u: 5.954855e-02
+  k: 1.209762e-03
+  pde: 9.405973e+00
+  lambda_u: 1.000000e+00
+  lambda_k: 4.506243e+01
+  lambda_pde: 1.000000e-01
+  ratio: 4.894833e+01
+  error_u: 2.147602e+00
+  error_k: 1.549569e-02

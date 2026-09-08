@@ -1,0 +1,12 @@
+{
+    "model_type": "KAN",
+    "hidden_layers": 2,
+    "hidden_units": 30,
+    "learning_rate": 0.001,
+    "activation": null,
+    "grid_size": 5,
+    "compute_time_sec": 6.412834882736206,
+    "err_u_global": 0.08573669934826685,
+    "err_k_global": 0.00594262866444412,
+    "timestamp": "20260908_110444"
+}

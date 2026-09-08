@@ -13,3 +13,5 @@ dependencies:
       - pyyaml==6.0.3
       - tqdm==4.68.4
       - pandas==3.0.3
+      - git+https://github.com/Blealtan/efficient-kan.git
+      - calflops 

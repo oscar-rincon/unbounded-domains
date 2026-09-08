@@ -1,0 +1,76 @@
+Training run: 2026-09-08_11-03-43_gaussian_sigma5.5_adaptive_sched_no_reg
+========================================
+
+Config:
+  adam_lr: 1.000000e-03
+  adam_iters: 2.000000e+02
+  lbfgs_iters: 2.000000e+02
+  print_every: 1.000000e+02
+  save_every: 1.000000e+02
+  lambda_pde_scheduler: True
+  adaptive_weights: True
+  alpha: 7.000000e+00
+  update_every: 1.000000e+02
+  regularization: False
+  sampling: gaussian
+  sigma: 5.500000e+00
+  exp_scale: 1.000000e+00
+  n_obs_u: 1.000000e+02
+  n_obs_k: 1.000000e+02
+  n_pde: 1.000000e+03
+  seed: 2.000000e+00
+  pde_alpha: 5.000000e-01
+  pde_beta: 5.000000e+00
+  epsilon: 1.000000e+00
+
+Model u (displacement network):
+  class: MLP
+  total params: 1,981
+  trainable params: 1,981
+  layers:
+    - linear_in: Linear (2 -> 30), bias=True
+    - linear_out: Linear (30 -> 1), bias=True
+    - layers.0: Linear (30 -> 30), bias=True
+    - layers.1: Linear (30 -> 30), bias=True
+    - act: Tanh
+  full architecture:
+    MLP(
+      (linear_in): Linear(in_features=2, out_features=30, bias=True)
+      (linear_out): Linear(in_features=30, out_features=1, bias=True)
+      (layers): ModuleList(
+        (0-1): 2 x Linear(in_features=30, out_features=30, bias=True)
+      )
+      (act): Tanh()
+    )
+
+Model k (parameter network):
+  class: MLP
+  total params: 1,981
+  trainable params: 1,981
+  layers:
+    - linear_in: Linear (2 -> 30), bias=True
+    - linear_out: Linear (30 -> 1), bias=True
+    - layers.0: Linear (30 -> 30), bias=True
+    - layers.1: Linear (30 -> 30), bias=True
+    - act: Tanh
+  full architecture:
+    MLP(
+      (linear_in): Linear(in_features=2, out_features=30, bias=True)
+      (linear_out): Linear(in_features=30, out_features=1, bias=True)
+      (layers): ModuleList(
+        (0-1): 2 x Linear(in_features=30, out_features=30, bias=True)
+      )
+      (act): Tanh()
+    )
+
+Final losses (last logged step):
+  total: 2.246256e-01
+  u: 7.305373e-03
+  k: 7.379355e-05
+  pde: 2.156594e+00
+  lambda_u: 1.000000e+00
+  lambda_k: 2.250737e+01
+  lambda_pde: 1.000000e-01
+  ratio: 2.072482e+01
+  error_u: 7.522104e-01
+  error_k: 3.827102e-03
