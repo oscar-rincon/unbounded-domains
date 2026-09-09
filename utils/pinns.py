@@ -1940,12 +1940,12 @@ def train_dual_network(
  
 
 def run_experiment_inf(
-    model_type="MLP",          # "MLP" or "KAN"
+    model_type="MLP",           # "MLP" or "KAN"
     hidden_layers=3,
-    hidden_units=25,           
-    activation=nn.Tanh(),      # Used if model_type == "MLP"
-    grid_size=5,               # Used if model_type == "KAN"
-    spline_order=3,            # Used if model_type == "KAN"
+    hidden_units=25,            
+    activation=nn.Tanh(),       # Used if model_type == "MLP"
+    grid_size=5,                # Used if model_type == "KAN"
+    spline_order=3,             # Used if model_type == "KAN"
     
     # Training / Sampling arguments
     adam_lr=1e-3,
@@ -1964,7 +1964,7 @@ def run_experiment_inf(
     epsilon=1.0,
     
     # Directory Option
-    results_dir="results",     # <--- Added option for a custom results folder name
+    results_dir="results",    # <--- Added option for a custom results folder name
     
     device="cpu",
 ):
@@ -1985,7 +1985,6 @@ def run_experiment_inf(
     # 2. Compute Parameters and FLOPs Safely
     total_params = sum(p.numel() for p in model_u.parameters()) + sum(p.numel() for p in model_k.parameters())
     try:
-        from calflops import calculate_flops
         input_shape = (1, 2)
         flops_u, _, _ = calculate_flops(model_u, input_shape=input_shape, print_results=False, output_as_string=False)
         flops_k, _, _ = calculate_flops(model_k, input_shape=input_shape, print_results=False, output_as_string=False)
@@ -2037,26 +2036,32 @@ def run_experiment_inf(
         pde_alpha=alpha, pde_beta=beta, epsilon=epsilon, device=device,
     )
 
-    # 4. Evaluate model
+# 4. Evaluate model
     eval_results = evaluate_model_inf(
         model_u=model_u, model_k=model_k,
         analytical_solution=analytical_solution_inf, coefficient=coefficient_inf,
         alpha=alpha, beta=beta, epsilon=epsilon, device=device, verbose=False
     )
     
-    err_u = eval_results["err_u_global"]
-    err_k = eval_results["err_k_global"]
+    # Extract global errors safely
+    err_u = eval_results.get("err_u_global", eval_results.get("err_u", 0.0))
+    err_k = eval_results.get("err_k_global", eval_results.get("err_k", 0.0))
     mean_global_error = 0.5 * (err_u + err_k)
     compute_time = time.time() - start_time
 
-    # 5. Compile Unified Record & Save to Custom Directory
+    # 5. Compile Unified Record with Explicit Inside/Outside Keys for the CSV
     unified_data = {
         **config,
         "parameters": total_params,
         "flops": total_flops,
         "compute_time_sec": compute_time,
+        # Explicit error metrics for global, inside, and outside domains
         "err_u_global": err_u,
         "err_k_global": err_k,
+        "err_u_inside": eval_results.get("err_u_inside", eval_results.get("inside_u", 0.0)),
+        "err_u_outside": eval_results.get("err_u_outside", eval_results.get("outside_u", 0.0)),
+        "err_k_inside": eval_results.get("err_k_inside", eval_results.get("inside_k", 0.0)),
+        "err_k_outside": eval_results.get("err_k_outside", eval_results.get("outside_k", 0.0)),
         "mean_global_error": mean_global_error,
         "timestamp": timestamp,
     }
@@ -2068,7 +2073,7 @@ def run_experiment_inf(
     with open(unified_json_path, "w") as f:
         json.dump(unified_data, f, indent=4)
 
-    # Append to master summary CSV inside the chosen results directory
+    # Append explicitly to master summary CSV inside the chosen results directory
     csv_path = os.path.join(results_dir, "summary_metrics.csv")
     file_exists = os.path.isfile(csv_path)
     df_row = pd.DataFrame([unified_data])
