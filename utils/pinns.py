@@ -1661,6 +1661,7 @@ def run_experiment_inf(
 
     run_dir = os.path.join(base_output_path, timestamp)
     os.makedirs(run_dir, exist_ok=True)
+    history["run_dir"] = run_dir
 
     # --------------------------------------------------
     # Save final model weights explicitly
@@ -1679,6 +1680,9 @@ def run_experiment_inf(
     unified_json_path = os.path.join(run_dir, "run_metrics_and_config.json")
     with open(unified_json_path, "w") as f:
         json.dump(unified_data, f, indent=4)
+
+    with open(os.path.join(run_dir, "history.pkl"), "wb") as f:
+        pickle.dump(history, f)
 
     # Append explicitly to master summary CSV inside the chosen results directory
     csv_path = os.path.join(results_dir, "summary_metrics.csv")
