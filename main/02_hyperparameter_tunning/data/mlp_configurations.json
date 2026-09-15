@@ -1,0 +1,488 @@
+[
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 1,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 2,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 25,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 50,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "Tanh",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "SiLU",
+    "learning_rate": 0.01
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.0001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.001
+  },
+  {
+    "hidden_layers": 3,
+    "hidden_units": 75,
+    "activation": "Sigmoid",
+    "learning_rate": 0.01
+  }
+]
