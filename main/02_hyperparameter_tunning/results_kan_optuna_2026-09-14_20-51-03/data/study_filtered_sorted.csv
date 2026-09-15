@@ -1,0 +1,2 @@
+number,value,datetime_start,datetime_complete,duration,params_grid_size,params_hidden_layers,params_hidden_units,params_learning_rate,params_spline_order,user_attrs_compute_time_sec,user_attrs_err_k,user_attrs_err_u,state
+2,0.9596882963365478,2026-09-14 20:51:11.687125,2026-09-14 20:51:14.883646,0 days 00:00:03.196521,5,3,25,0.001,3,3.1908395290374756,1.8825100708774989,0.03686652179559677,COMPLETE
