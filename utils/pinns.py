@@ -5,7 +5,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import pickle
-from calflops import calculate_flops
+try:
+    from calflops import calculate_flops
+except ImportError:
+    def calculate_flops(*args, **kwargs):
+        raise RuntimeError("calflops is not installed")
 import torch
 import torch.nn as nn
 import torch.optim as optim
