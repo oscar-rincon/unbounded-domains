@@ -1080,6 +1080,7 @@ def train_dual_network(
     sigma=2.0,
     exp_scale=1.0,
     n_obs_u=100,
+    n_boundary_u=0,
     n_obs_k=100,
     n_pde=1_000,
     seed=2,
@@ -1109,21 +1110,14 @@ def train_dual_network(
         "sigma": sigma,
         "exp_scale": exp_scale,
         "n_obs_u": n_obs_u,
+        "n_boundary_u": n_boundary_u,
         "n_obs_k": n_obs_k,
         "n_pde": n_pde,
         "seed": seed,
     }
 
 
-    (
-        X_obs_train,
-        U_obs_train,
-        X_obs_k_train,
-        K_obs_train,
-        X_pde_train,
-        F_pde_train,
-        *_,
-    ) = generate_dataset_inf(
+    dataset_kwargs = dict(
         sigma=sampling_config["sigma"],
         sampling=sampling_config["sampling"],
         exp_scale=sampling_config["exp_scale"],
@@ -1134,6 +1128,18 @@ def train_dual_network(
         device=device,
         seed=sampling_config["seed"],
     )
+    if n_boundary_u:
+        dataset_kwargs["n_boundary_u"] = n_boundary_u
+
+    (
+        X_obs_train,
+        U_obs_train,
+        X_obs_k_train,
+        K_obs_train,
+        X_pde_train,
+        F_pde_train,
+        *_,
+    ) = generate_dataset_inf(**dataset_kwargs)
     
     """analytical_solution_inf
             alpha=pde_alpha,

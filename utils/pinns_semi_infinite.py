@@ -53,6 +53,7 @@ def compute_analytical_errors_semi_inf(
 
 def train_dual_network_semi_inf(model_u, model_k, **kwargs):
     """Train the shared dual PINN loop with semi-infinite problem data."""
+    kwargs.setdefault("n_boundary_u", kwargs.get("n_obs_u", 100))
     kwargs.setdefault("analytical_solution_inf", analytical_solution_semi_inf)
     kwargs.setdefault("coefficient_inf", coefficient_semi_inf)
 
@@ -75,7 +76,7 @@ def run_experiment_semi_inf(
     adam_iters=2000,
     lbfgs_iters=2000,
     sigma=5.5,
-    exp_scale=1.0,
+    exp_scale=7.0,
     n_obs_u=100,
     n_obs_k=100,
     n_pde=1000,
@@ -121,6 +122,7 @@ def run_experiment_semi_inf(
         sigma=sigma,
         exp_scale=exp_scale,
         n_obs_u=n_obs_u,
+        n_boundary_u=n_obs_u,
         n_obs_k=n_obs_k,
         n_pde=n_pde,
         seed=seed,

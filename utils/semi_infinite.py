@@ -8,25 +8,28 @@ import torch
 
 
 def source_term_semi_inf(xs_semi, ys_semi, alpha_s_semi, beta_s_semi, eps_s_semi):
-    """Return a NumPy-callable Poisson source for the semi-infinite problem."""
-    u = sp.exp(
-        -alpha_s_semi * (xs_semi**2 + ys_semi**2)
-    ) * sp.cos(beta_s_semi * xs_semi)
+    """Return a numerically stable NumPy-callable Poisson source."""
+    del xs_semi, ys_semi, alpha_s_semi, beta_s_semi, eps_s_semi
 
-    k = 1 + 2 / (1 + sp.exp(-(ys_semi + 1.5) / eps_s_semi))
+    def source(x, y, alpha, beta, epsilon):
+        x = np.asarray(x)
+        y = np.asarray(y)
+        z = np.clip((y + 1.5) / epsilon, -60.0, 60.0)
+        sigmoid = 1.0 / (1.0 + np.exp(-z))
+        coefficient = 1.0 + 2.0 * sigmoid
+        coefficient_y = 2.0 * sigmoid * (1.0 - sigmoid) / epsilon
+        envelope = np.exp(-alpha * (x**2 + y**2))
+        laplacian_factor = (
+            (4.0 * alpha**2 * (x**2 + y**2) - 4.0 * alpha - beta**2)
+            * np.cos(beta * x)
+            + 4.0 * alpha * beta * x * np.sin(beta * x)
+        )
+        return envelope * (
+            -coefficient * laplacian_factor
+            + 2.0 * alpha * y * coefficient_y * np.cos(beta * x)
+        )
 
-    ux = sp.diff(u, xs_semi)
-    uy = sp.diff(u, ys_semi)
-    f = -(
-        sp.diff(k * ux, xs_semi)
-        + sp.diff(k * uy, ys_semi)
-    )
-
-    return sp.lambdify(
-        (xs_semi, ys_semi, alpha_s_semi, beta_s_semi, eps_s_semi),
-        sp.simplify(f),
-        "numpy",
-    )
+    return source
 
 
 def analytical_solution_semi_inf(xs_semi, ys_semi, alpha_s_semi, beta_s_semi):
@@ -38,7 +41,8 @@ def analytical_solution_semi_inf(xs_semi, ys_semi, alpha_s_semi, beta_s_semi):
 
 def coefficient_semi_inf(xs_semi, ys_semi, epsilon):
     """Evaluate the shifted variable coefficient k(y)."""
-    return 1 + 2 / (1 + np.exp(-(ys_semi + 1.5) / epsilon))
+    z = np.clip((ys_semi + 1.5) / epsilon, -60.0, 60.0)
+    return 1 + 2 / (1 + np.exp(-z))
 
 
 def generate_dataset_semi_inf(
@@ -48,12 +52,13 @@ def generate_dataset_semi_inf(
     train_domain=(-5.0, 5.0, -5.0, 0.0),
     eval_domain=(-8.0, 8.0, -8.0, 0.0),
     n_obs_u=100,
+    n_boundary_u=100,
     n_obs_k=100,
     n_pde=10_000,
     n_grid=300,
     sampling="uniform",
     sigma=2.5,
-    exp_scale=1.0,
+    exp_scale=7.0,
     device="cpu",
     dtype=torch.float32,
     plot=False,
@@ -86,10 +91,16 @@ def generate_dataset_semi_inf(
     eps_s = sp.symbols("epsilon", positive=True)
 
     x_obs, y_obs = sample_points(n_obs_u)
+    if sampling == "uniform":
+        x_boundary = rng.uniform(train_xmin, train_xmax, n_boundary_u)
+    else:
+        x_boundary = rng.normal(0.0, sigma, n_boundary_u)
+    y_boundary = np.full(n_boundary_u, train_ymax)
     x_obs_k, y_obs_k = sample_points(n_obs_k)
     x_pde, y_pde = sample_points(n_pde)
 
     u_obs = analytical_solution_semi_inf(x_obs, y_obs, alpha, beta)
+    u_boundary = analytical_solution_semi_inf(x_boundary, y_boundary, alpha, beta)
     k_obs = coefficient_semi_inf(x_obs_k, y_obs_k, epsilon)
     f_function = source_term_semi_inf(xs, ys, alpha_s, beta_s, eps_s)
     f_values = f_function(x_pde, y_pde, alpha, beta, epsilon)
@@ -109,9 +120,13 @@ def generate_dataset_semi_inf(
         )
 
     X_obs = tensor_points(x_obs, y_obs)
+    X_boundary = tensor_points(x_boundary, y_boundary)
     X_obs_k = tensor_points(x_obs_k, y_obs_k)
     X_pde = tensor_points(x_pde, y_pde)
     U_obs = torch.tensor(u_obs.reshape(-1, 1), dtype=dtype, device=device)
+    U_boundary = torch.tensor(u_boundary.reshape(-1, 1), dtype=dtype, device=device)
+    X_obs = torch.cat((X_obs, X_boundary), dim=0)
+    U_obs = torch.cat((U_obs, U_boundary), dim=0)
     K_obs = torch.tensor(k_obs.reshape(-1, 1), dtype=dtype, device=device)
     F_pde = torch.tensor(f_values.reshape(-1, 1), dtype=dtype, device=device)
 

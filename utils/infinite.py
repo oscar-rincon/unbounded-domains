@@ -1641,7 +1641,7 @@ def evaluate_model_inf(
             a.set_xlabel("")
             a.set_ylabel("")
 
-        fig.suptitle(sampling.capitalize(), fontsize=8, y=0.90)
+        fig.suptitle(sampling.capitalize(), fontsize=8, y=0.88)
 
         # Colorbar setups
         cbar_u = fig.colorbar(im_u, ax=ax00, orientation="horizontal", fraction=0.028, pad=0.20, aspect=30)
