@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 def plot_tradeoff(df_mlp, df_kan, output_dir="figures", target_error=1e-2):
     """Render and save the accuracy/efficiency comparison figure."""
     palette = {
-        "kan": "#1F77B4",
-        "mlp": "#333333",
-        "kan_highlight": "#6BAED6",
-        "mlp_highlight": "#999999",
+        "kan": "#6BAED6",
+        "mlp": "#999999",
+        "kan_highlight": "#1F77B4",
+        "mlp_highlight": "#333333",
         "text_muted": "#000000",
         "tick": "#808080",
         "spine": "#808080",
