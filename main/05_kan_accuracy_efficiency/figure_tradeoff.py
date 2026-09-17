@@ -134,72 +134,72 @@ def plot_tradeoff(
                 ]
             )
 
-            # Highlight color
-            highlight = (
-                palette["kan_highlight"]
-                if name == "KAN"
-                else palette["mlp_highlight"]
-            )
+            # # Highlight color
+            # highlight = (
+            #     palette["kan_highlight"]
+            #     if name == "KAN"
+            #     else palette["mlp_highlight"]
+            # )
 
-            # Annotation position
-            if x_col == "neurons":
+            # # Annotation position
+            # if x_col == "neurons":
 
-                annotation_offset = (
-                    (-12, 12)
-                    if name == "KAN"
-                    else (15, 12)
-                )
+            #     annotation_offset = (
+            #         (-12, 12)
+            #         if name == "KAN"
+            #         else (15, 12)
+            #     )
 
-                annotation_alignment = (
-                    "right"
-                    if name == "KAN"
-                    else "left"
-                )
+            #     annotation_alignment = (
+            #         "right"
+            #         if name == "KAN"
+            #         else "left"
+            #     )
 
-            else:
+            # else:
 
-                annotation_offset = (
-                    (-22, 10)
-                    if name == "KAN"
-                    else (15, 10)
-                )
+            #     annotation_offset = (
+            #         (-22, 10)
+            #         if name == "KAN"
+            #         else (15, 10)
+            #     )
 
-                annotation_alignment = (
-                    "right"
-                    if name == "KAN"
-                    else "left"
-                )
+            #     annotation_alignment = (
+            #         "right"
+            #         if name == "KAN"
+            #         else "left"
+            #     )
 
-            # Highlight selected configuration
-            ax.scatter(
-                best[x_col],
-                best["err_global_mean"],
-                color=highlight,
-                s=22,
-                marker=marker,
-                edgecolor=color,
-                linewidth=0.6,
-                zorder=5,
-            )
+            # # Highlight selected configuration
+            # ax.scatter(
+            #     best[x_col],
+            #     best["err_global_mean"],
+            #     color=highlight,
+            #     s=22,
+            #     marker=marker,
+            #     edgecolor=color,
+            #     linewidth=0.6,
+            #     zorder=5,
+            # )
 
-            # Annotate selected configuration
-            ax.annotate(
-                f"{int(best[x_col]):,}",
-                (
-                    best[x_col],
-                    best["err_global_mean"],
-                ),
-                xytext=annotation_offset,
-                textcoords="offset points",
-                ha=annotation_alignment,
-                fontsize=6,
-                color=highlight,
-                arrowprops=dict(
-                    arrowstyle="->",
-                    color=highlight,
-                    lw=0.7,
-                ),
-            )
+            # # Annotate selected configuration
+            # ax.annotate(
+            #     f"{int(best[x_col]):,}",
+            #     (
+            #         best[x_col],
+            #         best["err_global_mean"],
+            #     ),
+            #     xytext=annotation_offset,
+            #     textcoords="offset points",
+            #     ha=annotation_alignment,
+            #     fontsize=6,
+            #     color=highlight,
+            #     arrowprops=dict(
+            #         arrowstyle="->",
+            #         color=highlight,
+            #         lw=0.7,
+            #     ),
+            # )
 
         # Target-error line
         ax.axhline(
