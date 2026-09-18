@@ -35,3 +35,32 @@ To confirm that PyTorch detects your GPU and CUDA correctly, run:
  ```
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
  ```
+
+## Repository structure
+
+The repository is organized around shared utilities plus experiment-specific folders:
+
+```
+unbounded-domains/
+├── utils/                      # Shared domain, PINN/KAN, plotting, and path helpers
+├── main/
+│   ├── 01_manufactured_solution/
+│   ├── 02_hyperparameter_tunning/
+│   ├── 03_individual_prediction/
+│   ├── 04_sampling_approximation/
+│   └── 05_kan_accuracy_efficiency/
+├── figures/                    # Paper-level figures shared outside a single experiment
+└── PIKAN-unbounded-domains.yml
+```
+
+### Recommended module and folder conventions
+
+- Keep reusable code in `utils/` and experiment execution in `main/`.
+- Keep each experiment's `data/`, `results/`, and `figures/` inside its own numbered folder.
+- Use `utils/project_paths.py` for new scripts and notebooks instead of hardcoded relative paths.
+- Treat these stable experiment aliases as the canonical names in code: `manufactured_solution`, `hyperparameter_tuning`, `individual_prediction`, `sampling_approximation`, and `kan_accuracy_efficiency`.
+
+### Path helper usage
+
+New scripts and notebooks should resolve paths through `utils/project_paths.py` so they keep working even when launched from a different working directory. This also hides legacy directory names such as `02_hyperparameter_tunning` behind stable aliases.
+

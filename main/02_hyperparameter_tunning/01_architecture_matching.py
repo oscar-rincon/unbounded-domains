@@ -12,7 +12,11 @@ from calflops import calculate_flops
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-UTILITIES_DIR = SCRIPT_DIR.parents[1] / "utils"
+REPO_ROOT = next(
+    (path for path in [SCRIPT_DIR, *SCRIPT_DIR.parents] if (path / "utils").is_dir() and (path / "main").is_dir()),
+    SCRIPT_DIR,
+)
+UTILITIES_DIR = REPO_ROOT / "utils"
 os.chdir(SCRIPT_DIR)
 if str(UTILITIES_DIR) not in sys.path:
     sys.path.insert(0, str(UTILITIES_DIR))
@@ -26,6 +30,7 @@ reload(pinns)
 reload(plotting)
 
 from pinns import build_models, build_models_KAN, set_seed
+from project_paths import data_dir
 
 
 KAN_SEARCH_SPACE = {
@@ -49,7 +54,7 @@ KAN_GRIDS = [5]
 SPLINE_ORDER = 3
 MLP_SWEEP_WIDTHS = range(10, 150)
 INPUT_SHAPE = (1, 2)
-DATA_DIR = SCRIPT_DIR / "data"
+DATA_DIR = data_dir("hyperparameter_tuning")
 
 
 def generate_configurations():
