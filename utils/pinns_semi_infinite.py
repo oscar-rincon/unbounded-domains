@@ -1,7 +1,7 @@
 """PINN utilities for the semi-infinite manufactured problem.
 
 The neural-network architectures, PDE residual, loss scheduling, and training
-loop are shared with :mod:`pinns`. This module supplies the semi-infinite
+loop are shared with :mod:`pinns_infinite`. This module supplies the semi-infinite
 problem data and keeps the familiar public names available with ``_semi_inf``
 suffixes where the problem-specific behavior matters.
 """
@@ -12,7 +12,7 @@ from datetime import datetime
 
 import torch.nn as nn
 
-import pinns as _pinns
+import pinns_infinite as _pinns
 from semi_infinite import (
     analytical_solution_semi_inf,
     coefficient_semi_inf,
@@ -22,7 +22,7 @@ from semi_infinite import (
 )
 
 # Shared architectures, losses, schedulers, and saving helpers.
-from pinns import *  # noqa: F401,F403
+from pinns_infinite import *  # noqa: F401,F403
 
 
 pde_loss_semi_inf = _pinns.pde_loss_inf

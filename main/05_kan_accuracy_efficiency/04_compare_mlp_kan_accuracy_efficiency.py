@@ -23,15 +23,15 @@ if str(UTILITIES_DIR) not in sys.path:
     sys.path.insert(0, str(UTILITIES_DIR))
 
 import infinite
-import pinns
+import pinns_infinite
 import plotting
 
 reload(infinite)
-reload(pinns)
+reload(pinns_infinite)
 reload(plotting)
 
 from infinite import analytical_solution_inf
-from pinns import build_models, build_models_KAN, set_seed
+from pinns_infinite import build_models, build_models_KAN, set_seed
 from figure_far_field import plot_far_field
 from figure_tradeoff import plot_tradeoff
 

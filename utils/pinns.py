@@ -1,0 +1,1705 @@
+
+import os
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import pickle
+try:
+    from calflops import calculate_flops
+except ImportError:
+    def calculate_flops(*args, **kwargs):
+        raise RuntimeError("calflops is not installed")
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import time
+from matplotlib.patches import Rectangle
+from functools import partial   
+from matplotlib.gridspec import GridSpec
+#gaussian_kde
+from scipy.stats import gaussian_kde
+import traceback
+from efficient_kan import KAN
+from infinite import analytical_solution_inf, coefficient_inf, source_term_inf, generate_dataset_inf, evaluate_model_inf, compute_training_errors
+
+
+"""
+Training utilities for the dual-network (u, k) PINN model.
+
+This file is a reorganized version of the original `train_dual_network`
+function. The logic and the numbers it produces are UNCHANGED — every
+inner helper (compute_losses, compute_losses_test, ratio_calculation,
+get_pde_weight, update_loss_weights, save_history) has simply been
+pulled out to module level and made to take its state as explicit
+arguments instead of capturing it via closures/`nonlocal`.
+
+The only genuinely new pieces are the run-saving utilities at the
+bottom (`build_training_summary`, `format_summary_text`,
+`save_training_run`), which let you:
+  - save model weights + full history + a readable summary
+  - into a folder named after the moment the run finished
+  - and turn saving on/off with a single flag (save_results=True/False)
+
+NOTE: `compute_losses` and `compute_losses_test` from the original code
+were byte-for-byte identical except for which tensors they were fed
+(train vs. test). They've been merged into a single `compute_losses`
+that takes the data as arguments — this does not change any numbers,
+it just removes duplication. If you'd rather keep them as two
+separate functions, say so and I'll split them back out.
+
+You still need `observation_loss_u`, `observation_loss_k`,
+`pde_loss_inf`, and `l2_regularization` defined/imported exactly as
+in your original codebase — they are not redefined here.
+"""
+
+import os
+import json
+import pickle
+from datetime import datetime
+ 
+
+def set_seed(seed=42):
+    # Python's built-in random module
+    
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    random.seed(seed)
+    
+    # Numpy's random module
+    np.random.seed(seed)
+    
+    # PyTorch seed for CPU
+    torch.manual_seed(seed)
+    
+    # PyTorch seed for all GPU devices (if using CUDA)
+    torch.cuda.manual_seed_all(seed)
+    
+    # Make sure to disable CuDNN's non-deterministic optimizations
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+class MLP(nn.Module):
+    def __init__(self, input_size, output_size, hidden_layers, hidden_units, activation_function):
+        """
+        Initializes a more general neural network model.
+
+        Args:
+            input_size (int): The size of the input layer.
+            output_size (int): The size of the output layer.
+            hidden_layers (int): The number of hidden layers.
+            hidden_units (int): The number of units in each hidden layer.
+            activation_function (nn.Module): The activation function to use in the hidden layers.
+        """
+        super(MLP, self).__init__()
+        self.linear_in = nn.Linear(input_size, hidden_units)
+        self.linear_out = nn.Linear(hidden_units, output_size)
+        self.layers = nn.ModuleList([nn.Linear(hidden_units, hidden_units) for _ in range(hidden_layers)])
+        self.act = activation_function
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the neural network.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            torch.Tensor: The output tensor of the network.
+        """
+        x = self.linear_in(x)
+        for layer in self.layers:
+            x = self.act(layer(x))
+        x = self.linear_out(x)
+        return x    
+
+class MLPWithAlpha(nn.Module):
+
+    def __init__(
+        self,
+        input_size,
+        output_size,
+        hidden_layers,
+        hidden_units,
+        activation_function,
+        alpha_init=10.0,
+    ):
+        super().__init__()
+
+        # ---------------------------------------------
+        # Neural network
+        # ---------------------------------------------
+
+        self.network = MLP(
+            input_size=input_size,
+            output_size=output_size,
+            hidden_layers=hidden_layers,
+            hidden_units=hidden_units,
+            activation_function=activation_function,
+        )
+
+        # ---------------------------------------------
+        # Learnable alpha
+        #
+        # We optimize log(alpha) so that
+        # alpha is always positive.
+        # ---------------------------------------------
+
+        self.log_alpha = nn.Parameter(
+            torch.tensor(
+                np.log(alpha_init),
+                dtype=torch.float32
+            )
+        )
+
+    @property
+    def alpha(self):
+
+        return torch.exp(self.log_alpha)
+
+    def forward(self, X):
+
+        # ---------------------------------------------
+        # Coordinates
+        # ---------------------------------------------
+
+        x = X[:, 0:1]
+        y = X[:, 1:2]
+
+        r2 = x**2 + y**2
+
+        # ---------------------------------------------
+        # Exponential decay
+        # ---------------------------------------------
+
+        envelope = torch.exp(
+            -self.alpha * r2
+        )
+
+        # ---------------------------------------------
+        # Neural network
+        # ---------------------------------------------
+
+        v = self.network(X)
+
+        # ---------------------------------------------
+        # Solution ansatz
+        # ---------------------------------------------
+
+        u = envelope * v
+
+        return u
+
+def create_kan(
+    input_size,
+    output_size,
+    hidden_layers=3,
+    hidden_units=25,
+    grid_size=3,
+    spline_order=3,
+):
+    """
+    Creates a KAN model.
+
+    Args:
+        input_size (int): Number of input features.
+        output_size (int): Number of output features.
+        hidden_layers (int): Number of hidden layers.
+        hidden_units (int): Number of neurons (KAN units) per hidden layer.
+        grid_size (int): Number of spline intervals.
+        spline_order (int): Order of the B-splines.
+
+    Returns:
+        KAN: Initialized KAN model.
+    """
+    return KAN(
+        layers_hidden=[input_size]
+              + [hidden_units] * hidden_layers
+              + [output_size],
+        grid_size=grid_size,
+        spline_order=spline_order,
+    )
+
+
+class KANWithAlpha(nn.Module):
+
+    def __init__(
+        self,
+        input_size=2,
+        output_size=1,
+        hidden_layers=3,
+        hidden_units=25,
+        grid_size=3,
+        spline_order=3,
+        alpha_init=0.25,
+    ):
+        super().__init__()
+
+        # --------------------------------------------------
+        # KAN
+        # --------------------------------------------------
+
+        self.network = create_kan(
+            input_size=input_size,
+            output_size=output_size,
+            hidden_layers=hidden_layers,
+            hidden_units=hidden_units,
+            grid_size=grid_size,
+            spline_order=spline_order,
+        )
+
+        # --------------------------------------------------
+        # Trainable alpha
+        # --------------------------------------------------
+        # We optimize log(alpha) so that alpha > 0.
+        # --------------------------------------------------
+
+        self.log_alpha = nn.Parameter(
+            torch.tensor(
+                np.log(alpha_init),
+                dtype=torch.float32
+            )
+        )
+
+    # ------------------------------------------------------
+    # Physical parameter
+    # ------------------------------------------------------
+
+    @property
+    def alpha(self):
+
+        return torch.exp(self.log_alpha)
+
+    # ------------------------------------------------------
+    # Forward
+    # ------------------------------------------------------
+
+    def forward(self, X):
+
+        # Coordinates
+        x = X[:, 0:1]
+        y = X[:, 1:2]
+
+        # r^2 = x^2 + y^2
+        r2 = x**2 + y**2
+
+        # Exponential decay
+        envelope = torch.exp(
+            -self.alpha * r2
+        )
+
+        # KAN prediction
+        v = self.network(X)
+
+        # Solution
+        u = envelope * v
+
+        return u
+
+class CoefficientNet(nn.Module):
+
+    def __init__(self,
+                 hidden_layers=3,
+                 hidden_units=25,
+                 activation=nn.Tanh()):
+        super().__init__()
+
+        layers = [
+            nn.Linear(1, hidden_units),
+            activation
+        ]
+
+        for _ in range(hidden_layers-1):
+            layers += [
+                nn.Linear(hidden_units, hidden_units),
+                activation
+            ]
+
+        layers.append(nn.Linear(hidden_units,1))
+
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, X):
+
+        y = X[:,1:2]
+
+        phi = self.net(y)
+
+        k = 1.0 + 2.0*torch.sigmoid(phi)
+
+        return k
+
+class CoefficientKAN(nn.Module):
+
+    def __init__(
+        self,
+        hidden_layers=3,
+        hidden_units=16,
+        grid=3,
+        k=3,
+    ):
+        super().__init__()
+
+        layers = [1] + [hidden_units] * hidden_layers + [1]
+
+        self.net = KAN(
+            layers_hidden=layers,
+            grid_size=grid,
+            spline_order=k,
+        )
+
+    def forward(self, X):
+
+        y = X[:, 1:2]
+
+        phi = self.net(y)
+
+        k = 1.0 + 2.0 * torch.sigmoid(phi)
+
+        return k
+
+def derivative(dy: torch.Tensor, x: torch.Tensor, order: int = 1) -> torch.Tensor:
+    """
+    Computes the derivative of a given tensor 'dy' with respect to another tensor 'x',
+    up to a specified order.
+
+    Args:
+        dy (torch.Tensor): The tensor whose derivative is to be computed.
+        x (torch.Tensor): The tensor with respect to which the derivative is to be computed.
+        order (int, optional): The order of the derivative to compute. Defaults to 1, which
+                               means a first-order derivative. Higher orders result in higher-order
+                               derivatives.
+
+    Returns:
+        torch.Tensor: The computed derivative of 'dy' with respect to 'x', of the specified order.
+    """
+    for i in range(order):
+        dy = torch.autograd.grad(
+            dy, x, grad_outputs=torch.ones_like(dy), create_graph=True, retain_graph=True
+        )[0]
+    return dy  
+
+def init_weights(m):
+    """
+    Initializes the weights and biases of a linear layer in the neural network using Xavier normalization.
+
+    Args:
+        m: The module or layer to initialize. If the module is of type nn.Linear, its weights and biases
+           will be initialized.
+    """
+    if type(m) == nn.Linear:
+        torch.manual_seed(42)  # fix inside
+        torch.nn.init.xavier_normal_(m.weight)
+        m.bias.data.fill_(0.0)
+
+
+def pde_loss_inf(
+    model_u,
+    model_k,
+    X,
+    F
+):
+
+    # --------------------------------------------------
+    # Predictions
+    # --------------------------------------------------
+
+    u = model_u(X)
+    k = model_k(X)
+    #k = coefficient_torch(X)
+    # --------------------------------------------------
+    # grad(u)
+    # --------------------------------------------------
+
+    grad_u = torch.autograd.grad(
+        u,
+        X,
+        grad_outputs=torch.ones_like(u),
+        create_graph=True,
+    )[0]
+
+    ux = grad_u[:, 0:1]
+    uy = grad_u[:, 1:2]
+
+    # --------------------------------------------------
+    # Fluxes
+    # --------------------------------------------------
+
+    qx = k * ux
+    qy = k * uy
+
+    grad_qx = torch.autograd.grad(
+        qx,
+        X,
+        grad_outputs=torch.ones_like(qx),
+        create_graph=True,
+    )[0]
+
+    grad_qy = torch.autograd.grad(
+        qy,
+        X,
+        grad_outputs=torch.ones_like(qy),
+        create_graph=True,
+    )[0]
+
+    div = (
+        grad_qx[:, 0:1]
+        + grad_qy[:, 1:2]
+    )
+
+    residual = - div - F
+
+    # --------------------------------------------------
+    # PDE loss
+    # --------------------------------------------------
+
+    loss_pde = torch.mean(residual**2)
+ 
+    return loss_pde
+
+ 
+
+
+def observation_loss_u(
+    model_u,
+    X,
+    U_true,
+    criterion
+):
+
+    pred = model_u(X)
+
+    mse = criterion(pred, U_true)
+
+    return mse
+
+ 
+
+def observation_loss_k(
+    model_k,
+    X,
+    K_true,
+    criterion):
+
+    pred = model_k(X)
+
+    mse = criterion(pred, K_true)
+
+    return mse
+
+
+def build_models_KAN(
+    device,
+    alpha_init=10.0,
+    hidden_layers=3,
+    hidden_units=25,
+    grid_size=5,
+    spline_order=3,
+):
+    model_u = KAN(
+        layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
+        grid_size=grid_size,
+        spline_order=spline_order,
+        grid_range=[-5, 5],
+    ).to(device)
+
+    model_k = KAN(
+        layers_hidden=[2] + [hidden_units] * hidden_layers + [1],
+        grid_size=grid_size,
+        spline_order=spline_order,
+        grid_range=[-5, 5],
+    ).to(device)
+
+    return model_u, model_k 
+
+
+def build_models(
+    device,
+    hidden_layers=3,
+    hidden_units=25,
+    activation=nn.Tanh(),
+):
+    model_u = MLP(
+        input_size=2,
+        output_size=1,
+        hidden_layers=hidden_layers,
+        hidden_units=hidden_units,
+        activation_function=activation,
+    ).to(device) 
+ 
+    model_k = MLP(
+        input_size=2,
+        output_size=1,
+        hidden_layers=hidden_layers,
+        hidden_units=hidden_units,
+        activation_function=nn.Tanh(),
+    ).to(device) 
+
+    model_u.apply(init_weights)
+    model_k.apply(init_weights)
+
+    return model_u, model_k
+
+def l2_regularization(parameters):
+    l2 = torch.zeros((), device=parameters[0].device)
+    for p in parameters:
+        l2 += p.pow(2).sum()
+    return l2
+
+ 
+ 
+
+
+# ======================================================================
+# Loss computation (was: compute_losses / compute_losses_test closures)
+# ======================================================================
+
+def compute_losses(
+    model_u,
+    model_k,
+    X_obs,
+    U_obs,
+    X_obs_k,
+    K_obs,
+    X_pde,
+    F_pde,
+    criterion,
+    lambda_u,
+    lambda_k,
+    lambda_pde,
+    parameters,
+    regularization=False,
+    lambda_reg=1.0,
+):
+    """
+    Compute weighted total loss + individual components for a given
+    data split (pass train tensors for training loss, test tensors for
+    test loss -- this replaces the old compute_losses/compute_losses_test
+    pair, same math either way).
+    """
+    loss_u = observation_loss_u(model_u, X_obs, U_obs, criterion)
+    loss_k = observation_loss_k(model_k, X_obs_k, K_obs, criterion)
+    loss_pde = pde_loss_inf(model_u, model_k, X_pde, F_pde)
+
+    loss_u = torch.nan_to_num(loss_u)
+    loss_k = torch.nan_to_num(loss_k)
+    loss_pde = torch.nan_to_num(loss_pde)
+
+    reg_t = l2_regularization(parameters) if regularization else None
+
+    total = (
+        lambda_u * loss_u
+        + lambda_k * loss_k
+        + lambda_pde * loss_pde
+        + (lambda_reg * reg_t if regularization else 0.0)
+    )
+
+    total_no_reg = loss_u + loss_k + loss_pde
+
+    return total, loss_u, loss_k, loss_pde, total_no_reg
+
+
+# ======================================================================
+# Ratio / weight scheduling helpers
+# ======================================================================
+
+def ratio_calculation(history, update_every):
+    V = np.array([
+        np.mean(history["u"][-update_every:]),
+        np.mean(history["k"][-update_every:]),
+    ])
+    return V.max() / (V.min() + 1e-12)
+
+
+def get_pde_weight(epoch):
+
+    if epoch < 400:
+        return 0.10
+    elif epoch < 800:
+        return 0.25
+    elif epoch < 1200:
+        return 0.50
+    elif epoch < 1600:
+        return 0.75
+    else:
+        return 1.00
+
+
+def update_loss_weights(
+    history,
+    iteration,
+    lambda_u,
+    lambda_k,
+    lambda_pde,
+    loss_u,
+    loss_k,
+    update_every,
+    alpha,
+    adaptive_weights,
+    verbose=False,
+):
+    """
+    Returns the (possibly updated) (lambda_u, lambda_k).
+    Mutates `history` in place by appending R_u / R_k, exactly like the
+    original. Caller is responsible for reassigning
+    lambda_u, lambda_k = update_loss_weights(...)
+    since Python closures used `nonlocal` for this before.
+    """
+    if len(history["u"]) == 0:
+        V = np.array([loss_u.item(), loss_k.item()])
+    else:
+        V = np.array([
+            np.mean(history["u"][-update_every:]),
+            np.mean(history["k"][-update_every:]),
+        ])
+
+    ratio = V.max() / (V.min() + 1e-12)
+
+    # --------------------------------------------------------
+    # No adaptive weighting
+    # --------------------------------------------------------
+
+    if not adaptive_weights:
+
+        history["lambda_iteration"].append(iteration)
+        history["lambda_u"].append(lambda_u)
+        history["lambda_k"].append(lambda_k)
+        history["lambda_pde"].append(lambda_pde)
+
+        return lambda_u, lambda_k
+
+    ratio_threshold = 10.0
+
+    if ratio <= ratio_threshold:
+       R = (V - V.min()) / (V.max() - V.min() + 1e-12)
+
+       history["R_u"].append(R[0])
+       history["R_k"].append(R[1])
+       return lambda_u, lambda_k
+
+    R = (V - V.min()) / (V.max() - V.min() + 1e-12)
+
+    history["R_u"].append(R[0])
+    history["R_k"].append(R[1])
+
+    effective_alpha = alpha * (1.0 + ratio / ratio_threshold)
+
+    lambdas = 1.0 + effective_alpha  * R
+    fastest = np.argmin(V)
+    lambdas[fastest] = 1.0
+
+    new_lambda_u, new_lambda_k = lambdas[0], lambdas[1]
+
+    # --------------------------------------------------------
+    # SAVE WEIGHTS
+    # --------------------------------------------------------
+
+    history["lambda_iteration"].append(iteration)
+    history["lambda_u"].append(lambda_u)
+    history["lambda_k"].append(lambda_k)
+    history["lambda_pde"].append(lambda_pde)
+
+    if verbose:
+        print(
+            f"V      = {V.round(3)}\n"
+            f"R      = {R.round(3)}\n"
+            f"ratio  = {ratio:.2f}\n"
+            f"lambda_u = {new_lambda_u:.3f}\n"
+            f"lambda_k = {new_lambda_k:.3f}\n"
+            f"lambda_pde = {lambda_pde:.3f}"
+        )
+
+    return new_lambda_u, new_lambda_k
+
+
+def compute_analytical_errors(
+    model_u,
+    model_k,
+    analytical_solution_inf,
+    coefficient_inf,
+    pde_alpha,
+    pde_beta,
+    epsilon,
+    device,
+):
+    """
+    Wraps evaluate_model_inf. Returns (None, None) if the analytical
+    reference isn't provided, so callers can log err_u/err_k unconditionally
+    without branching -- keeps this fully optional / backward compatible.
+    """
+    if analytical_solution_inf is None or coefficient_inf is None:
+        return None, None
+
+    err_u, err_k = evaluate_model_inf(
+        model_u=model_u,
+        model_k=model_k,
+        analytical_solution=analytical_solution_inf,
+        coefficient=coefficient_inf,
+        alpha=pde_alpha,
+        beta=pde_beta,
+        epsilon=epsilon,
+        device=device,
+    )
+    return err_u, err_k
+
+# ======================================================================
+# History bookkeeping (was: save_history closure)
+# ======================================================================
+
+def save_history_entry(
+    history,
+    iteration,
+    total,
+    loss_u,
+    loss_k,
+    loss_pde,
+    ratio,
+    #total_test,
+    total_no_reg,
+    #total_no_reg_test,
+    err_u=None,
+    err_k=None,
+):
+    history["total"].append(total.item())
+    history["iteration"].append(iteration)
+    history["u"].append(loss_u.item())
+    history["k"].append(loss_k.item())
+    history["pde"].append(loss_pde.item())
+    history["ratio"].append(ratio)
+    history["total_no_reg"].append(total_no_reg.item()) 
+    history["error_u"].append(err_u.item() if hasattr(err_u, "item") else err_u)
+    history["error_k"].append(err_k.item() if hasattr(err_k, "item") else err_k)
+
+
+def new_history():
+    return {
+        "total": [],
+        "u": [],
+        "k": [],
+        "pde": [],
+        "iteration": [],
+        "lambda_iteration": [],
+        "lambda_u": [],
+        "lambda_k": [],
+        "lambda_pde": [],
+        "R_u": [],
+        "R_k": [],
+        "R_pde": [],
+        "R_reg_t": [],
+        "ratio": [],
+        "total_test": [],
+        "total_no_reg": [],
+        "total_no_reg_test": [],
+        "error_u": [],
+        "error_k": [],
+        "sampling": [],
+    }
+
+ 
+
+
+# ======================================================================
+# Run saving: model weights + history + human-readable summary
+# ======================================================================
+
+def describe_model(model):
+    """
+    Introspect an nn.Module generically -- works for any architecture
+    (MLP, Fourier features, custom blocks, etc.) without needing to know
+    its class ahead of time.
+
+    Captures:
+      - class name
+      - total / trainable parameter counts
+      - a per-layer breakdown (name, type, and shape info when the
+        layer exposes in/out features, e.g. nn.Linear)
+      - the full architecture printout (str(model)), which is the most
+        reliable "ground truth" view of the network's structure
+    """
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
+
+    layers = []
+    for name, module in model.named_modules():
+        # skip the root module itself (name == "") and pure containers
+        if name == "" or list(module.children()):
+            continue
+
+        layer_info = {"name": name, "type": module.__class__.__name__}
+
+        if hasattr(module, "in_features") and hasattr(module, "out_features"):
+            layer_info["in_features"] = module.in_features
+            layer_info["out_features"] = module.out_features
+        if hasattr(module, "bias") and isinstance(getattr(module, "bias", None), torch.Tensor):
+            layer_info["bias"] = True
+        elif hasattr(module, "bias"):
+            layer_info["bias"] = module.bias is not None
+
+        layers.append(layer_info)
+
+    return {
+        "class_name": model.__class__.__name__,
+        "total_params": total_params,
+        "trainable_params": trainable_params,
+        "layers": layers,
+        "architecture": str(model),
+    }
+
+
+def build_training_summary(history, config, model_u=None, model_k=None):
+    """Small JSON-able snapshot of how the run went (final + best losses)."""
+
+    def last(key):
+        return history[key][-1] if history.get(key) else None
+
+    def best(key):
+        return min(history[key]) if history.get(key) else None
+
+    def last_valid(key):
+        """Like last(), but skips a trailing None (error_u/error_k are only
+        computed if analytical_solution_inf/coefficient_inf were provided)."""
+        vals = history.get(key)
+        return vals[-1] if vals and vals[-1] is not None else None
+
+    def best_valid(key):
+        """Like best(), but ignores None entries (analytical errors may be
+        absent for some/all logged steps)."""
+        vals = history.get(key)
+        if not vals:
+            return None
+        valid = [v for v in vals if v is not None]
+        return min(valid) if valid else None
+
+    summary = {
+        "config": config,
+        "training_time_sec": history.get("training_time_sec"),
+        "n_logged_steps": len(history.get("total", [])),
+        "final": {
+            "total": last("total"),
+            #"total_test": last("total_test"),
+            "u": last("u"),
+            "k": last("k"),
+            "pde": last("pde"),
+            "lambda_u": last("lambda_u"),
+            "lambda_k": last("lambda_k"),
+            "lambda_pde": last("lambda_pde"),
+            "ratio": last("ratio"),
+            "error_u": last_valid("error_u"),
+            "error_k": last_valid("error_k"),
+        },
+    }
+
+    if model_u is not None:
+        summary["model_u"] = describe_model(model_u)
+    if model_k is not None:
+        summary["model_k"] = describe_model(model_k)
+
+    return summary
+
+
+def _format_model_section(label, model_info):
+    lines = [f"{label}:", f"  class: {model_info['class_name']}"]
+    lines.append(f"  total params: {model_info['total_params']:,}")
+    lines.append(f"  trainable params: {model_info['trainable_params']:,}")
+
+    if model_info["layers"]:
+        lines.append("  layers:")
+        for layer in model_info["layers"]:
+            shape = ""
+            if "in_features" in layer and "out_features" in layer:
+                shape = f" ({layer['in_features']} -> {layer['out_features']})"
+            bias = f", bias={layer['bias']}" if "bias" in layer else ""
+            lines.append(f"    - {layer['name'] or layer['type']}: {layer['type']}{shape}{bias}")
+
+    lines.append("  full architecture:")
+    for line in model_info["architecture"].splitlines():
+        lines.append(f"    {line}")
+
+    return lines
+
+def _format_value(v):
+    """Render numeric values in scientific notation; leave everything else
+    (bools, strings, None) as-is."""
+    if isinstance(v, bool):
+        # bool is a subclass of int -- guard against True/False becoming 1e+00/0e+00
+        return v
+    if isinstance(v, (int, float)):
+        return f"{v:.6e}"
+    return v
+
+
+def format_summary_text(summary, run_name):
+    cfg = summary["config"]
+    fin = summary["final"]
+    # bst = summary["best"]
+
+    lines = [f"Training run: {run_name}", "=" * 40, "", "Config:"]
+    for k, v in cfg.items():
+        lines.append(f"  {k}: {_format_value(v)}")
+
+    if "model_u" in summary:
+        lines += [""] + _format_model_section("Model u (displacement network)", summary["model_u"])
+    if "model_k" in summary:
+        lines += [""] + _format_model_section("Model k (parameter network)", summary["model_k"])
+
+    lines += ["", "Final losses (last logged step):"]
+    for k, v in fin.items():
+        lines.append(f"  {k}: {_format_value(v)}")
+ 
+    return "\n".join(lines) + "\n"
+
+
+def save_training_run(
+    model_u,
+    model_k,
+    history,
+    config,
+    save_results=True,
+    base_dir="results",
+    run_name=None,
+):
+    """
+    Save model weights, full training history, configuration, and
+    human-readable summaries for a completed training run.
+    Uses a clean timestamp-only directory structure.
+    """
+
+    # ============================================================
+    # AUTOMATIC RUN NAME (Clean Timestamp Only)
+    # ============================================================
+
+    if run_name is None:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        run_name = timestamp  # Keeps folder name clean and strictly chronological
+
+    # ============================================================
+    # RUN DIRECTORY (e.g., results/2026-09-08_14-35-10/)
+    # ============================================================
+
+    run_dir = os.path.join(
+        base_dir,
+        run_name
+    )
+
+    # ============================================================
+    # ADD SAMPLING INFORMATION TO HISTORY
+    # ============================================================
+
+    if "sampling" not in history:
+        history["sampling"] = {
+            "type": config.get("sampling"),
+            "sigma": config.get("sigma"),
+            "exp_scale": config.get("exp_scale"),
+            "n_obs_u": config.get("n_obs_u"),
+            "n_obs_k": config.get("n_obs_k"),
+            "n_pde": config.get("n_pde"),
+            "seed": config.get("seed"),
+        }
+
+    # ============================================================
+    # BUILD SUMMARY
+    # ============================================================
+
+    summary = build_training_summary(
+        history,
+        config,
+        model_u=model_u,
+        model_k=model_k,
+    )
+
+    # Explicitly store experiment & sampling configuration
+    summary["config"] = config
+    summary["sampling"] = history["sampling"]
+
+    # ============================================================
+    # DO NOT SAVE
+    # ============================================================
+
+    if not save_results:
+        return {
+            "saved": False,
+            "run_dir": None,
+            "summary": summary,
+        }
+
+    # ============================================================
+    # CREATE DIRECTORY & SAVE FILES
+    # ============================================================
+
+    os.makedirs(run_dir, exist_ok=True)
+
+    torch.save(model_u.state_dict(), os.path.join(run_dir, "model_u.pt"))
+    torch.save(model_k.state_dict(), os.path.join(run_dir, "model_k.pt"))
+ 
+    with open(os.path.join(run_dir, "summary.json"), "w") as f:
+        json.dump(summary, f, indent=2)
+ 
+    print(f"Training run saved to: {run_dir}")
+
+    return {
+        "saved": True,
+        "run_dir": run_dir,
+        "summary": summary,
+    }
+
+
+# ======================================================================
+# Main training loop
+# ======================================================================
+
+def train_dual_network(
+    model_u,
+    model_k,
+
+    # --------------------------------------------------
+    # Training parameters
+    # --------------------------------------------------
+    adam_lr=1e-3,
+    adam_iters=2000,
+    lbfgs_iters=2000,
+
+    verbose=False,
+    print_every=100,
+    save_every=100,
+
+    lambda_pde_scheduler=True,
+    adaptive_weights=True,
+
+    alpha=7,
+    update_every=100,
+
+    regularization=False,
+
+    # --------------------------------------------------
+    # Sampling metadata
+    # --------------------------------------------------
+    sampling="gaussian",
+    sigma=2.0,
+    exp_scale=1.0,
+    n_obs_u=100,
+    n_boundary_u=0,
+    n_obs_k=100,
+    n_pde=1_000,
+    seed=2,
+
+    # --------------------------------------------------
+    # Saving
+    # --------------------------------------------------
+    save_results=True,
+    base_dir="results",
+    run_name=None,
+
+    # --------------------------------------------------
+    # Analytical solution
+    # --------------------------------------------------
+    analytical_solution_inf=analytical_solution_inf,
+    coefficient_inf=coefficient_inf,
+
+    pde_alpha=0.5,
+    pde_beta=5,
+    epsilon=1,
+
+    device=None,
+):
+
+    sampling_config = {
+        "sampling": sampling,
+        "sigma": sigma,
+        "exp_scale": exp_scale,
+        "n_obs_u": n_obs_u,
+        "n_boundary_u": n_boundary_u,
+        "n_obs_k": n_obs_k,
+        "n_pde": n_pde,
+        "seed": seed,
+    }
+
+
+    dataset_kwargs = dict(
+        sigma=sampling_config["sigma"],
+        sampling=sampling_config["sampling"],
+        exp_scale=sampling_config["exp_scale"],
+        n_obs_u=sampling_config["n_obs_u"],
+        n_obs_k=sampling_config["n_obs_k"],
+        n_pde=sampling_config["n_pde"],
+        plot=False,
+        device=device,
+        seed=sampling_config["seed"],
+    )
+    if n_boundary_u:
+        dataset_kwargs["n_boundary_u"] = n_boundary_u
+
+    (
+        X_obs_train,
+        U_obs_train,
+        X_obs_k_train,
+        K_obs_train,
+        X_pde_train,
+        F_pde_train,
+        *_,
+    ) = generate_dataset_inf(**dataset_kwargs)
+    
+    """analytical_solution_inf
+            alpha=pde_alpha,
+            beta=pde_beta,
+            epsilon=epsilon,
+    """
+    criterion = nn.MSELoss()
+
+
+    parameters = list(model_u.parameters()) + list(model_k.parameters())
+
+    optimizer_adam = optim.AdamW(
+        parameters,
+        lr=adam_lr,
+        weight_decay=1 if regularization else 0.0,
+    )
+
+    optimizer_lbfgs = optim.LBFGS(
+        parameters,
+        lr=1,
+        max_iter=lbfgs_iters,
+        max_eval=lbfgs_iters,
+        history_size=100,
+        tolerance_change=1.0 * np.finfo(float).eps,
+        line_search_fn="strong_wolfe",
+    )
+
+    history = new_history()
+
+    history["sampling"] = {
+        "type": sampling,
+        "sigma": sigma,
+        "exp_scale": exp_scale,
+        "n_obs_u": n_obs_u,
+        "n_obs_k": n_obs_k,
+        "n_pde": n_pde,
+        "seed": seed,
+    }
+
+    lambda_u = 1.0
+    lambda_k = 1.0
+    lambda_pde = 1.0
+
+    # --------------------------------------------------
+    # Adam
+    # --------------------------------------------------
+    training_start_time = time.perf_counter()
+
+    if verbose:
+        print("\n====================================")
+        print("Training with Adam")
+        print("====================================")
+
+    model_u.train()
+    model_k.train()
+
+    for epoch in range(adam_iters + 1):
+
+            if lambda_pde_scheduler:
+                lambda_pde = get_pde_weight(epoch)
+            history["lambda_iteration"].append(epoch)
+            history["lambda_u"].append(lambda_u)
+            history["lambda_k"].append(lambda_k)
+            history["lambda_pde"].append(lambda_pde)
+
+            optimizer_adam.zero_grad()
+
+            total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(
+                model_u, model_k,
+                X_obs_train, U_obs_train, X_obs_k_train, K_obs_train,
+                X_pde_train, F_pde_train,
+                criterion, lambda_u, lambda_k, lambda_pde,
+                parameters, regularization,
+            )
+
+            if epoch == 0:
+                V = np.array([loss_u.item(), loss_k.item()])
+                ratio = V.max() / (V.min() + 1e-12)
+            else:
+                ratio = ratio_calculation(history, update_every)
+
+            total.backward()
+            optimizer_adam.step()
+
+            if adaptive_weights and epoch % update_every == 0 and epoch > 0:
+                lambda_u, lambda_k = update_loss_weights(
+                    history, epoch, lambda_u, lambda_k, lambda_pde,
+                    loss_u, loss_k, update_every, alpha,
+                    adaptive_weights, verbose,
+                )
+
+            # --------------------------------------------------
+            # Separate Error Calculation (Triggered if printing OR saving)
+            # --------------------------------------------------
+            err_u, err_k = None, None
+            is_printing = verbose and epoch % print_every == 0
+            is_saving = epoch % save_every == 0
+
+            if is_printing or is_saving:
+                err_u, err_k = compute_training_errors(
+                    model_u=model_u,
+                    model_k=model_k,
+                    X_obs=X_obs_train,
+                    X_obs_k=X_obs_k_train,
+                    analytical_solution=analytical_solution_inf,
+                    coefficient=coefficient_inf,
+                    alpha=pde_alpha,
+                    beta=pde_beta,
+                    epsilon=epsilon,
+                    device=device,
+                )
+
+            if is_printing:
+                print(
+                    f"Adam {epoch:5d} | "
+                    f"Total={total.item():.3e} | "
+                    f"ObsU={loss_u.item():.3e} | "
+                    f"ObsK={loss_k.item():.3e} | "
+                    f"PDE={loss_pde.item():.3e} | "
+                    f"Ratio={ratio:.2f}"
+                    + (f" | ErrU={err_u:.3e} | ErrK={err_k:.3e}" if err_u is not None else "")
+                )
+
+            if is_saving:
+                save_history_entry(
+                    history, epoch, total, loss_u, loss_k, loss_pde, ratio,
+                    total_no_reg, err_u=err_u, err_k=err_k,
+                )
+        # --------------------------------------------------
+    # L-BFGS
+    # --------------------------------------------------
+    if verbose:
+        print("\n====================================")
+        print("Training with L-BFGS")
+        print("====================================")
+
+    state = {"iter": 0, "loss_u": None, "loss_k": None, "loss_pde": None}
+ 
+    def closure():
+            nonlocal lambda_u, lambda_k, X_obs_train, U_obs_train, X_obs_k_train, K_obs_train, X_pde_train, F_pde_train
+
+            optimizer_lbfgs.zero_grad()
+            lambda_reg = 0
+
+            total, loss_u, loss_k, loss_pde, total_no_reg = compute_losses(
+                model_u, model_k,
+                X_obs_train, U_obs_train, X_obs_k_train, K_obs_train,
+                X_pde_train, F_pde_train,
+                criterion, lambda_u, lambda_k, lambda_pde,
+                parameters, regularization, lambda_reg,
+            )
+
+            total.backward()
+            ratio = ratio_calculation(history, update_every)
+
+            if adaptive_weights and state["iter"] % update_every == 0 and state["iter"] > 0:
+                lambda_u, lambda_k = update_loss_weights(
+                    history, state["iter"] + adam_iters, lambda_u, lambda_k, lambda_pde,
+                    loss_u, loss_k, update_every, alpha,
+                    adaptive_weights, verbose,
+                )
+
+            state["loss_u"] = loss_u.detach()
+            state["loss_k"] = loss_k.detach()
+            state["loss_pde"] = loss_pde.detach()
+            state["iter"] += 1
+
+            current_iter = state["iter"]
+            
+            # --------------------------------------------------
+            # Separate Error Calculation for L-BFGS
+            # --------------------------------------------------
+            err_u, err_k = None, None
+            is_printing = verbose and current_iter % print_every == 0
+            is_saving = current_iter % save_every == 0
+
+            if is_printing or is_saving:
+                err_u, err_k = compute_training_errors(
+                    model_u=model_u,
+                    model_k=model_k,
+                    X_obs=X_obs_train,
+                    X_obs_k=X_obs_k_train,
+                    analytical_solution=analytical_solution_inf,
+                    coefficient=coefficient_inf,
+                    alpha=pde_alpha,
+                    beta=pde_beta,
+                    epsilon=epsilon,
+                    device=device,
+                )
+
+            if is_printing:
+                print(
+                    f"L-BFGS {current_iter:5d} | "
+                    f"Total={total.item():.3e} | "
+                    f"ObsU={loss_u.item():.3e} | "
+                    f"ObsK={loss_k.item():.3e} | "
+                    f"PDE={loss_pde.item():.3e} | "
+                    f"Ratio={ratio:.2f}"
+                    + (f" | ErrU={err_u:.3e} | ErrK={err_k:.3e}" if err_u is not None else "")
+                )
+
+            history["lambda_iteration"].append(current_iter + adam_iters)
+            history["lambda_u"].append(lambda_u)
+            history["lambda_k"].append(lambda_k)
+            history["lambda_pde"].append(lambda_pde)
+
+            if is_saving:
+                save_history_entry(
+                    history, current_iter + adam_iters, total, loss_u, loss_k, loss_pde, ratio,
+                    total_no_reg, 
+                    err_u=err_u, err_k=err_k,
+                )
+
+            return total
+
+    optimizer_lbfgs.step(closure)
+    training_time_sec = time.perf_counter() - training_start_time
+    # --------------------------------------------------
+    # Save model weights + history + summary
+    # --------------------------------------------------
+    config = {
+        # --------------------------------------------------
+        # Training
+        # --------------------------------------------------
+        "adam_lr": adam_lr,
+        "adam_iters": adam_iters,
+        "lbfgs_iters": lbfgs_iters,
+        "print_every": print_every,
+        "save_every": save_every,
+
+        # --------------------------------------------------
+        # Loss weighting
+        # --------------------------------------------------
+        "lambda_pde_scheduler": lambda_pde_scheduler,
+        "adaptive_weights": adaptive_weights,
+        "alpha": alpha,
+        "update_every": update_every,
+
+        # --------------------------------------------------
+        # Regularization
+        # --------------------------------------------------
+        "regularization": regularization,
+
+        # --------------------------------------------------
+        # Sampling
+        # --------------------------------------------------
+        "sampling": sampling,
+        "sigma": sigma,
+        "exp_scale": exp_scale,
+        "n_obs_u": n_obs_u,
+        "n_obs_k": n_obs_k,
+        "n_pde": n_pde,
+        "seed": seed,
+
+        # --------------------------------------------------
+        # PDE / analytical solution
+        # --------------------------------------------------
+        "pde_alpha": pde_alpha,
+        "pde_beta": pde_beta,
+        "epsilon": epsilon,
+    }
+
+    history["training_time_sec"] = training_time_sec
+
+    save_info = save_training_run(
+        model_u,
+        model_k,
+        history,
+        config,
+        save_results=False,
+        base_dir=base_dir,
+        run_name=run_name,
+    )
+
+    history["run_dir"] = save_info["run_dir"]
+
+    return history
+
+ 
+def benchmark_model_derivatives(model_u, 
+                                eval_xmin=-8.0,
+                                eval_xmax=8.0,
+                                eval_ymin=-8.0,
+                                eval_ymax=8.0,
+                                device="cpu"):
+    """
+    Benchmark:
+        - forward evaluation of u and k
+        - first derivative du/dx
+        - second derivative d2u/dx2
+
+    Returns times in milliseconds.
+    """
+
+    model_u.eval()
+
+    x = torch.linspace(eval_xmin, eval_xmax, 300, device=device)
+    y = torch.linspace(eval_ymin, eval_ymax, 300, device=device)
+
+    X, Y = torch.meshgrid(x, y, indexing="ij")
+
+    X_eval = torch.stack(
+        [X.reshape(-1), Y.reshape(-1)],
+        dim=1
+    )
+
+    X = X_eval.detach().clone().to(device)
+    X.requires_grad_(True)
+
+    # --------------------------------------------------
+    # Evaluation time
+    # --------------------------------------------------
+    start = time.perf_counter()
+
+    with torch.no_grad():
+        u = model_u(X)
+
+    if device != "cpu":
+        torch.cuda.synchronize()
+
+    evaluation_time_ms = (time.perf_counter() - start) * 1000
+
+    # --------------------------------------------------
+    # First derivative
+    # --------------------------------------------------
+    X = X_eval.detach().clone().to(device)
+    X.requires_grad_(True)
+
+    if device != "cpu":
+        torch.cuda.synchronize()
+
+    start = time.perf_counter()
+
+    u = model_u(X)
+
+    du_dx = torch.autograd.grad(
+        u,
+        X,
+        grad_outputs=torch.ones_like(u),
+        create_graph=True,
+    )[0][:, 0:1]
+
+    if device != "cpu":
+        torch.cuda.synchronize()
+
+    first_derivative_time_ms = (time.perf_counter() - start) * 1000
+
+    # --------------------------------------------------
+    # Second derivative
+    # --------------------------------------------------
+    X = X_eval.detach().clone().to(device)
+    X.requires_grad_(True)
+
+    if device != "cpu":
+        torch.cuda.synchronize()
+
+    start = time.perf_counter()
+
+    u = model_u(X)
+
+    du_dx = torch.autograd.grad(
+        u,
+        X,
+        grad_outputs=torch.ones_like(u),
+        create_graph=True,
+    )[0][:, 0:1]
+
+    d2u_dx2 = torch.autograd.grad(
+        du_dx,
+        X,
+        grad_outputs=torch.ones_like(du_dx),
+        create_graph=False,
+    )[0][:, 0:1]
+
+    if device != "cpu":
+        torch.cuda.synchronize()
+
+    second_derivative_time_ms = (time.perf_counter() - start) * 1000
+
+    return {
+        "evaluation_time_ms": evaluation_time_ms,
+        "first_derivative_time_ms": first_derivative_time_ms,
+        "second_derivative_time_ms": second_derivative_time_ms,
+    } 
+ 
+
+def run_experiment_inf(
+    model_type="MLP",           # "MLP" or "KAN"
+    hidden_layers=3,
+    hidden_units=25,            
+    activation=nn.Tanh(),       # Used if model_type == "MLP"
+    grid_size=5,                # Used if model_type == "KAN"
+    spline_order=3,             # Used if model_type == "KAN"
+    
+    # Training / Sampling arguments
+    adam_lr=1e-3,
+    adam_iters=2000,
+    lbfgs_iters=2000,
+    sigma=5.5,
+    exp_scale=1.0,
+    n_obs_u=100,
+    n_obs_k=100,
+    n_pde=1000,
+    seed=2,
+    
+    # PDE Parameters
+    alpha=0.5,
+    beta=5.0,
+    epsilon=1.0,
+    
+    # Directory Option
+    results_dir="results",    # <--- Added option for a custom results folder name
+    
+    device="cpu",
+):
+    start_time = time.time()
+    model_upper = model_type.upper()
+
+    # 1. Build models
+    if model_upper == "KAN":
+        model_u, model_k = build_models_KAN(
+            device=device, hidden_layers=hidden_layers, hidden_units=hidden_units, 
+            grid_size=grid_size, spline_order=spline_order,
+        )
+    else:
+        model_u, model_k = build_models(
+            device=device, hidden_layers=hidden_layers, hidden_units=hidden_units, activation=activation,
+        )
+
+    # 2. Compute Parameters and FLOPs Safely
+    total_params = sum(p.numel() for p in model_u.parameters()) + sum(p.numel() for p in model_k.parameters())
+    try:
+        input_shape = (1, 2)
+        flops_u, _, _ = calculate_flops(model_u, input_shape=input_shape, print_results=False, output_as_string=False)
+        flops_k, _, _ = calculate_flops(model_k, input_shape=input_shape, print_results=False, output_as_string=False)
+        total_flops = int(flops_u + flops_k)
+    except Exception:
+        total_flops = total_params * 2
+
+    # 3. Train dual network (passing custom results base_dir)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    
+    config = {
+        "model_type": model_upper,
+        "hidden_layers": hidden_layers,
+        "hidden_units": hidden_units,
+        "adam_lr": adam_lr,
+        "adam_iters": adam_iters,
+        "lbfgs_iters": lbfgs_iters,
+        "activation": str(activation) if model_upper == "MLP" else None,
+        "grid_size": grid_size if model_upper == "KAN" else None,
+        "spline_order": spline_order if model_upper == "KAN" else None,
+        "sampling": "gaussian",
+        "sigma": sigma,
+        "exp_scale": exp_scale,
+        "n_obs_u": n_obs_u,
+        "n_obs_k": n_obs_k,
+        "n_pde": n_pde,
+        "seed": seed,
+        "lambda_pde_scheduler": True,
+        "adaptive_weights": True,
+        "alpha": 7,
+        "update_every": 100,
+        "regularization": False,
+        "pde_alpha": alpha,
+        "pde_beta": beta,
+        "epsilon": epsilon,
+    }
+
+    base_output_path = os.path.join(results_dir, model_upper)
+
+    history = train_dual_network(
+        model_u=model_u, model_k=model_k,
+        adam_lr=adam_lr, adam_iters=adam_iters, lbfgs_iters=lbfgs_iters,
+        verbose=False, print_every=100, save_every=100,
+        lambda_pde_scheduler=True, adaptive_weights=True, alpha=7, update_every=100,
+        regularization=False, sampling="gaussian", sigma=sigma, exp_scale=exp_scale,
+        n_obs_u=n_obs_u, n_obs_k=n_obs_k, n_pde=n_pde, seed=seed,
+        save_results=True, base_dir=base_output_path, run_name=timestamp,
+        analytical_solution_inf=analytical_solution_inf, coefficient_inf=coefficient_inf,
+        pde_alpha=alpha, pde_beta=beta, epsilon=epsilon, device=device,
+    )
+
+# 4. Evaluate model
+    eval_results = evaluate_model_inf(
+        model_u=model_u, model_k=model_k,
+        analytical_solution=analytical_solution_inf, coefficient=coefficient_inf,
+        alpha=alpha, beta=beta, epsilon=epsilon, device=device, verbose=False
+    )
+
+    timing_results = benchmark_model_derivatives(
+        model_u=model_u,
+        device=device,
+    )
+    
+    # Extract global errors safely
+    err_u = eval_results.get("err_u_global", eval_results.get("err_u", 0.0))
+    err_k = eval_results.get("err_k_global", eval_results.get("err_k", 0.0))
+    mean_global_error = 0.5 * (err_u + err_k)
+    compute_time = time.time() - start_time
+
+    # 5. Compile Unified Record with Explicit Inside/Outside Keys for the CSV
+    unified_data = {
+        **config,
+
+        "parameters": total_params,
+        "flops": total_flops,
+
+        # Training / total experiment time
+        "training_time_sec": history["training_time_sec"],
+        "compute_time_sec": compute_time,
+
+        # Evaluation costs
+        "evaluation_time_ms": timing_results["evaluation_time_ms"],
+        "first_derivative_time_ms": timing_results["first_derivative_time_ms"],
+        "second_derivative_time_ms": timing_results["second_derivative_time_ms"],
+
+        # Errors
+        "err_u_global": err_u,
+        "err_k_global": err_k,
+        "err_u_inside": eval_results.get("err_u_inside", eval_results.get("inside_u", 0.0)),
+        "err_u_outside": eval_results.get("err_u_outside", eval_results.get("outside_u", 0.0)),
+        "err_k_inside": eval_results.get("err_k_inside", eval_results.get("inside_k", 0.0)),
+        "err_k_outside": eval_results.get("err_k_outside", eval_results.get("outside_k", 0.0)),
+        "mean_global_error": mean_global_error,
+
+        "timestamp": timestamp,
+    }
+
+    run_dir = os.path.join(base_output_path, timestamp)
+    os.makedirs(run_dir, exist_ok=True)
+    history["run_dir"] = run_dir
+
+    # --------------------------------------------------
+    # Save final model weights explicitly
+    # --------------------------------------------------
+
+    torch.save(
+        model_u.state_dict(),
+        os.path.join(run_dir, "model_u.pt")
+    )
+
+    torch.save(
+        model_k.state_dict(),
+        os.path.join(run_dir, "model_k.pt")
+    )
+
+    unified_json_path = os.path.join(run_dir, "run_metrics_and_config.json")
+    with open(unified_json_path, "w") as f:
+        json.dump(unified_data, f, indent=4)
+
+    with open(os.path.join(run_dir, "history.pkl"), "wb") as f:
+        pickle.dump(history, f)
+
+    # Append explicitly to master summary CSV inside the chosen results directory
+    csv_path = os.path.join(results_dir, "summary_metrics.csv")
+    file_exists = os.path.isfile(csv_path)
+    df_row = pd.DataFrame([unified_data])
+    with open(csv_path, "a", newline="") as f:
+        df_row.to_csv(f, header=not file_exists, index=False)
+
+    print(f"\n[{model_upper}] L={hidden_layers}, N={hidden_units} | Params: {total_params:,} | Mean Err: {mean_global_error:.3e} | Saved to '{results_dir}/'.")
+    return err_u, err_k, compute_time
