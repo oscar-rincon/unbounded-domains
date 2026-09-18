@@ -17,12 +17,8 @@ import torch.nn as nn
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = next(
-    (path for path in [SCRIPT_DIR, *SCRIPT_DIR.parents] if (path / "utils").is_dir() and (path / "main").is_dir()),
-    SCRIPT_DIR,
-)
 os.chdir(SCRIPT_DIR)
-UTILITIES_DIR = REPO_ROOT / "utils"
+UTILITIES_DIR = SCRIPT_DIR.parents[1] / "utils"
 if str(UTILITIES_DIR) not in sys.path:
     sys.path.insert(0, str(UTILITIES_DIR))
 
@@ -36,16 +32,17 @@ reload(plotting)
 
 from infinite import analytical_solution_inf
 from pinns import build_models, build_models_KAN, set_seed
-from project_paths import experiment_dir, figures_dir
+from project_paths import experiment_dir, figures_dir, find_repo_root
 from figure_far_field import plot_far_field
 from figure_tradeoff import plot_tradeoff
 
 
-EXPERIMENT_DIR = experiment_dir("kan_accuracy_efficiency")
+REPO_ROOT = find_repo_root(SCRIPT_DIR)
+EXPERIMENT_DIR = experiment_dir("kan_accuracy_efficiency", REPO_ROOT)
 MLP_RESULTS_DIR = EXPERIMENT_DIR / "results_accuracy_efficiency_2026-09-14_11-02-44"
 KAN_RESULTS_DIR = EXPERIMENT_DIR / "results_accuracy_efficiency_2026-09-14_11-13-10"
 TARGET_ERROR = 1e-2
-FIGURES_DIR = figures_dir("kan_accuracy_efficiency")
+FIGURES_DIR = figures_dir("kan_accuracy_efficiency", REPO_ROOT)
 
 
 def load_experiment_data():

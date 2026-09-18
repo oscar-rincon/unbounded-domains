@@ -57,10 +57,11 @@ unbounded-domains/
 
 - Keep reusable code in `utils/` and experiment execution in `main/`.
 - Keep each experiment's `data/`, `results/`, and `figures/` inside its own numbered folder.
-- Use `utils/project_paths.py` for new scripts and notebooks instead of hardcoded relative paths.
+- Use `utils/project_paths.py` for experiment, data, results, and figures paths instead of hardcoded relative paths.
 - Treat these stable experiment aliases as the canonical names in code: `manufactured_solution`, `hyperparameter_tuning`, `individual_prediction`, `sampling_approximation`, and `kan_accuracy_efficiency`.
 
 ### Path helper usage
 
-New scripts and notebooks should resolve paths through `utils/project_paths.py` so they keep working even when launched from a different working directory. This also hides legacy directory names such as `02_hyperparameter_tunning` behind stable aliases.
+Scripts in `main/` can add `utils/` to `sys.path`, import `project_paths`, and then resolve canonical locations through `find_repo_root()`, `experiment_dir()`, `data_dir()`, `results_dir()`, and `figures_dir()`.
 
+Notebooks should first locate the repository root from `Path.cwd()` to add `utils/` to `sys.path`, then use `project_paths` for every experiment, data, results, and figures location. This keeps notebook execution robust even when Jupyter starts from a different working directory, and it hides legacy directory names such as `02_hyperparameter_tunning` behind stable aliases.
