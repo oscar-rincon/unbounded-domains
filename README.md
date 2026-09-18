@@ -35,3 +35,33 @@ To confirm that PyTorch detects your GPU and CUDA correctly, run:
  ```
 python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
  ```
+
+## Repository structure
+
+The repository is organized around shared utilities plus experiment-specific folders:
+
+```
+unbounded-domains/
+├── utils/                      # Shared domain, PINN/KAN, plotting, and path helpers
+├── main/
+│   ├── 01_manufactured_solution/
+│   ├── 02_hyperparameter_tunning/
+│   ├── 03_individual_prediction/
+│   ├── 04_sampling_approximation/
+│   └── 05_kan_accuracy_efficiency/
+├── figures/                    # Paper-level figures shared outside a single experiment
+└── PIKAN-unbounded-domains.yml
+```
+
+### Recommended module and folder conventions
+
+- Keep reusable code in `utils/` and experiment execution in `main/`.
+- Keep each experiment's `data/`, `results/`, and `figures/` inside its own numbered folder.
+- Use `utils/project_paths.py` for experiment, data, results, and figures paths instead of hardcoded relative paths.
+- Treat these stable experiment aliases as the canonical names in code: `manufactured_solution`, `hyperparameter_tuning`, `individual_prediction`, `sampling_approximation`, and `kan_accuracy_efficiency`.
+
+### Path helper usage
+
+Scripts in `main/` can add `utils/` to `sys.path`, import `project_paths`, and then resolve canonical locations through `find_repo_root()`, `experiment_dir()`, `data_dir()`, `results_dir()`, and `figures_dir()`.
+
+Notebooks should first locate the repository root from `Path.cwd()` to add `utils/` to `sys.path`, then use `project_paths` for every experiment, data, results, and figures location. This keeps notebook execution robust even when Jupyter starts from a different working directory, and it hides legacy directory names such as `02_hyperparameter_tunning` behind stable aliases.

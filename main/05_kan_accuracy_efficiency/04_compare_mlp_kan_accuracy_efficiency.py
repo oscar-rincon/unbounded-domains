@@ -32,20 +32,23 @@ reload(plotting)
 
 from infinite import analytical_solution_inf
 from pinns import build_models, build_models_KAN, set_seed
+from project_paths import experiment_dir, figures_dir, find_repo_root
 from figure_far_field import plot_far_field
 from figure_tradeoff import plot_tradeoff
 
 
-MLP_RESULTS_DIR = "results_accuracy_efficiency_2026-09-14_11-02-44"
-KAN_RESULTS_DIR = "results_accuracy_efficiency_2026-09-14_11-13-10"
+REPO_ROOT = find_repo_root(SCRIPT_DIR)
+EXPERIMENT_DIR = experiment_dir("kan_accuracy_efficiency", REPO_ROOT)
+MLP_RESULTS_DIR = EXPERIMENT_DIR / "results_accuracy_efficiency_2026-09-14_11-02-44"
+KAN_RESULTS_DIR = EXPERIMENT_DIR / "results_accuracy_efficiency_2026-09-14_11-13-10"
 TARGET_ERROR = 1e-2
-FIGURES_DIR = "figures"
+FIGURES_DIR = figures_dir("kan_accuracy_efficiency", REPO_ROOT)
 
 
 def load_experiment_data():
     """Load and combine the MLP and KAN summary metrics."""
-    mlp = pd.read_csv(Path(MLP_RESULTS_DIR) / "summary_metrics.csv")
-    kan = pd.read_csv(Path(KAN_RESULTS_DIR) / "summary_metrics.csv")
+    mlp = pd.read_csv(MLP_RESULTS_DIR / "summary_metrics.csv")
+    kan = pd.read_csv(KAN_RESULTS_DIR / "summary_metrics.csv")
     mlp.columns = mlp.columns.str.strip()
     kan.columns = kan.columns.str.strip()
     for frame in (mlp, kan):
@@ -80,7 +83,7 @@ def load_models(selected, device):
         ("MLP", MLP_RESULTS_DIR, build_models),
         ("KAN", KAN_RESULTS_DIR, build_models_KAN),
     ):
-        run_dir = Path(run_root) / model_name / str(selected[model_name]["timestamp"])
+        run_dir = run_root / model_name / str(selected[model_name]["timestamp"])
         with open(run_dir / "run_metrics_and_config.json", "r") as file:
             config = json.load(file)
 

@@ -26,6 +26,7 @@ reload(pinns)
 reload(plotting)
 
 from pinns import build_models, build_models_KAN, set_seed
+from project_paths import data_dir, find_repo_root
 
 
 KAN_SEARCH_SPACE = {
@@ -49,7 +50,8 @@ KAN_GRIDS = [5]
 SPLINE_ORDER = 3
 MLP_SWEEP_WIDTHS = range(10, 150)
 INPUT_SHAPE = (1, 2)
-DATA_DIR = SCRIPT_DIR / "data"
+REPO_ROOT = find_repo_root(SCRIPT_DIR)
+DATA_DIR = data_dir("hyperparameter_tuning", REPO_ROOT)
 
 
 def generate_configurations():
