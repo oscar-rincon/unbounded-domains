@@ -1551,7 +1551,7 @@ def run_experiment_inf(
     epsilon=1.0,
     
     # Directory Option
-    results_dir="results",    # <--- Added option for a custom results folder name
+    results_dir="results",    # 
     
     device="cpu",
 ):
