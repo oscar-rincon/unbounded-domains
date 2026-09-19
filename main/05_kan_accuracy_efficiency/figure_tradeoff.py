@@ -51,29 +51,36 @@ def plot_tradeoff(
     # Figure layout
     # --------------------------------------------------
     fig = plt.figure(
-        figsize=(7.3, 2.8),
+        figsize=(6.3, 3.2),
         constrained_layout=False,
         facecolor="#FFFFFF",
     )
 
     grid = fig.add_gridspec(
         2,
-        4,
+        1,
         height_ratios=[1.2, 0.8],
+        hspace=0.75,
     )
 
+    top_grid = grid[0].subgridspec(1, 3, wspace=0.35)
+    bottom_grid = grid[1].subgridspec(1, 4, wspace=0.7)
+
     axes = [
-        fig.add_subplot(grid[0, 0:2]),
-        fig.add_subplot(grid[0, 2:4]),
-        fig.add_subplot(grid[1, 0]),
-        fig.add_subplot(grid[1, 1]),
-        fig.add_subplot(grid[1, 2]),
-        fig.add_subplot(grid[1, 3]),
+        fig.add_subplot(top_grid[0, 0]),
+        fig.add_subplot(top_grid[0, 1]),
+        fig.add_subplot(top_grid[0, 2]),
+        fig.add_subplot(bottom_grid[0, 0]),
+        fig.add_subplot(bottom_grid[0, 1]),
+        fig.add_subplot(bottom_grid[0, 2]),
+        fig.add_subplot(bottom_grid[0, 3]),
     ]
 
     plt.subplots_adjust(
-        wspace=0.7,
-        hspace=0.6,
+        left=0.07,
+        right=0.99,
+        bottom=0.16,
+        top=0.96,
     )
 
     # --------------------------------------------------
@@ -187,6 +194,14 @@ def plot_tradeoff(
         "parameters",
         "Number of Parameters",
         False,
+        False,
+    )
+
+    plot_accuracy(
+        axes[2],
+        "flop_counter_flops",
+        "FLOPs",
+        False,
         True,
     )
 
@@ -231,7 +246,7 @@ def plot_tradeoff(
         ylabel,
         value_format,
     ) in zip(
-        axes[2:],
+        axes[3:],
         measurements,
     ):
 
@@ -320,7 +335,7 @@ def plot_tradeoff(
     # --------------------------------------------------
     # Bottom-row x tick labels: BLACK
     # --------------------------------------------------
-    for ax in axes[2:]:
+    for ax in axes[3:]:
         ax.tick_params(
             axis="x",
             labelcolor="black",
