@@ -1550,6 +1550,9 @@ def run_experiment_inf(
     beta=5.0,
     epsilon=1.0,
     
+    # Evaluation domain (xmin, xmax, ymin, ymax)
+    eval_domain=(-8.0, 8.0, -8.0, 8.0),
+    
     # Directory Option
     results_dir="results",    # <--- Added option for a custom results folder name
     
@@ -1624,9 +1627,11 @@ def run_experiment_inf(
     )
 
 # 4. Evaluate model
+    eval_xmin, eval_xmax, eval_ymin, eval_ymax = eval_domain
     eval_results = evaluate_model_inf(
         model_u=model_u, model_k=model_k,
         analytical_solution=analytical_solution_inf, coefficient=coefficient_inf,
+        eval_xmin=eval_xmin, eval_xmax=eval_xmax, eval_ymin=eval_ymin, eval_ymax=eval_ymax,
         alpha=alpha, beta=beta, epsilon=epsilon, device=device, verbose=False
     )
 

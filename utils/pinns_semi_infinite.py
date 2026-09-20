@@ -84,6 +84,7 @@ def run_experiment_semi_inf(
     alpha=0.5,
     beta=5.0,
     epsilon=1.0,
+    eval_domain=(-8.0, 8.0, -8.0, 0.0),
     results_dir="results",
     device="cpu",
 ):
@@ -143,6 +144,7 @@ def run_experiment_semi_inf(
         alpha=alpha,
         beta=beta,
         epsilon=epsilon,
+        eval_domain=eval_domain,
         device=device,
     )
 
