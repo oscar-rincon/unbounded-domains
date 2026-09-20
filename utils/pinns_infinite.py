@@ -1083,7 +1083,7 @@ def train_dual_network(
     n_boundary_u=0,
     n_obs_k=100,
     n_pde=1_000,
-    seed=2,
+    seed=42,
 
     # --------------------------------------------------
     # Saving
@@ -1543,7 +1543,7 @@ def run_experiment_inf(
     n_obs_u=100,
     n_obs_k=100,
     n_pde=1000,
-    seed=2,
+    seed=42,
     
     # PDE Parameters
     alpha=0.5,

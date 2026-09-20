@@ -80,7 +80,7 @@ def run_experiment_semi_inf(
     n_obs_u=100,
     n_obs_k=100,
     n_pde=1000,
-    seed=2,
+    seed=42,
     alpha=0.5,
     beta=5.0,
     epsilon=1.0,

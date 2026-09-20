@@ -134,7 +134,7 @@ def evaluate_models(models, device):
 
 
 def main():
-    set_seed(1)
+    set_seed(42)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data = load_experiment_data()
     plot_tradeoff(

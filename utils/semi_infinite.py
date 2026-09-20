@@ -62,7 +62,7 @@ def generate_dataset_semi_inf(
     device="cpu",
     dtype=torch.float32,
     plot=False,
-    seed=1,
+    seed=42,
 ):
     """Generate observations, PDE points, and evaluation data."""
     rng = np.random.default_rng(seed)

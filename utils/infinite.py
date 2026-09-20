@@ -83,7 +83,7 @@ def generate_dataset_inf(
     dtype=torch.float32,
 
     plot=False,
-    seed=1,
+    seed=42,
 ):
     """
     Generate data for the infinite-domain inverse problem.
