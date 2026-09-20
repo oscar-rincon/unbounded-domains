@@ -6,10 +6,14 @@ problem data and keeps the familiar public names available with ``_semi_inf``
 suffixes where the problem-specific behavior matters.
 """
 
+import json
 import os
+import pickle
 import time
 from datetime import datetime
 
+import pandas as pd
+import torch
 import torch.nn as nn
 
 import pinns_infinite as _pinns
@@ -151,9 +155,74 @@ def run_experiment_semi_inf(
     timing_results = benchmark_model_derivatives(model_u=model_u, device=device)
     err_u = eval_results["err_u_global"]
     err_k = eval_results["err_k_global"]
+    mean_global_error = 0.5 * (err_u + err_k)
+    compute_time = time.time() - start_time
     run_dir = os.path.join(base_output_path, timestamp)
     os.makedirs(run_dir, exist_ok=True)
     history["run_dir"] = run_dir
+
+    config = {
+        "model_type": model_upper,
+        "hidden_layers": hidden_layers,
+        "hidden_units": hidden_units,
+        "adam_lr": adam_lr,
+        "adam_iters": adam_iters,
+        "lbfgs_iters": lbfgs_iters,
+        "activation": str(activation) if model_upper == "MLP" else None,
+        "grid_size": grid_size if model_upper == "KAN" else None,
+        "spline_order": spline_order if model_upper == "KAN" else None,
+        "sampling": "gaussian_exponential",
+        "sigma": sigma,
+        "exp_scale": exp_scale,
+        "n_obs_u": n_obs_u,
+        "n_obs_k": n_obs_k,
+        "n_pde": n_pde,
+        "seed": seed,
+        "pde_alpha": alpha,
+        "pde_beta": beta,
+        "epsilon": epsilon,
+    }
+
+    unified_data = {
+        **config,
+        "parameters": total_params,
+        "training_time_sec": history.get("training_time_sec"),
+        "compute_time_sec": compute_time,
+        "evaluation_time_ms": timing_results["evaluation_time_ms"],
+        "first_derivative_time_ms": timing_results["first_derivative_time_ms"],
+        "second_derivative_time_ms": timing_results["second_derivative_time_ms"],
+        "err_u_global": err_u,
+        "err_k_global": err_k,
+        "err_u_inside": eval_results.get("err_u_inside", 0.0),
+        "err_u_outside": eval_results.get("err_u_outside", 0.0),
+        "err_k_inside": eval_results.get("err_k_inside", 0.0),
+        "err_k_outside": eval_results.get("err_k_outside", 0.0),
+        "mean_global_error": mean_global_error,
+        "timestamp": timestamp,
+    }
+
+    # Persist weights, config, and history for this trial so the winning
+    # model can be reloaded later without retraining.
+    torch.save(model_u.state_dict(), os.path.join(run_dir, "model_u.pt"))
+    torch.save(model_k.state_dict(), os.path.join(run_dir, "model_k.pt"))
+
+    with open(os.path.join(run_dir, "run_metrics_and_config.json"), "w") as f:
+        json.dump(unified_data, f, indent=4)
+
+    with open(os.path.join(run_dir, "history.pkl"), "wb") as f:
+        pickle.dump(history, f)
+
+    csv_path = os.path.join(results_dir, "summary_metrics.csv")
+    file_exists = os.path.isfile(csv_path)
+    df_row = pd.DataFrame([unified_data])
+    with open(csv_path, "a", newline="") as f:
+        df_row.to_csv(f, header=not file_exists, index=False)
+
+    print(
+        f"\n[{model_upper}] L={hidden_layers}, N={hidden_units} | "
+        f"Params: {total_params:,} | Mean Err: {mean_global_error:.3e} | "
+        f"Saved to '{run_dir}/'."
+    )
 
     return {
         "model_u": model_u,
@@ -164,9 +233,9 @@ def run_experiment_semi_inf(
         "parameters": total_params,
         "err_u_global": err_u,
         "err_k_global": err_k,
-        "mean_global_error": 0.5 * (err_u + err_k),
+        "mean_global_error": mean_global_error,
         "training_time_sec": history.get("training_time_sec"),
-        "compute_time_sec": time.time() - start_time,
+        "compute_time_sec": compute_time,
         "timestamp": timestamp,
         "run_dir": run_dir,
     }
