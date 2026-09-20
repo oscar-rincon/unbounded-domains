@@ -3,16 +3,38 @@
 import os
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 
 
-def plot_far_field(U_pred_mlp, U_pred_kan, U, x, y, palette, output_dir="figures"):
-    """Render and save the far-field comparison figure."""
+def plot_far_field(
+    U_pred_mlp,
+    U_pred_kan,
+    U,
+    x,
+    y,
+    palette,
+    output_dir="figures",
+    u_vmin=-1.0,
+    u_vmax=1.0,
+    u_n_ticks=5,
+    u_tick_decimals=2,
+    error_vmin=0.0,
+    error_vmax=None,
+    error_n_ticks=5,
+    error_tick_decimals=3,
+    mae_decimals=3,
+):
+    """Render and save the far-field comparison figure.
+
+    error_vmax=None auto-scales to the max error visible in the plotted window.
+    u_n_ticks / error_n_ticks control how many ticks each colorbar shows.
+    """
     error_mlp = np.abs(U_pred_mlp - U)
     error_kan = np.abs(U_pred_kan - U)
 
     r_square = np.maximum(np.abs(np.meshgrid(x, y)[0]), np.abs(np.meshgrid(x, y)[1]))
-    ring_edges = np.arange(0, 51, 5)
+    ring_edges = np.arange(0, 101, 10)
     ring_labels = [f"{ring_edges[i]}–{ring_edges[i + 1]}" for i in range(len(ring_edges) - 1)]
     mae_mlp = []
     mae_kan = []
@@ -29,7 +51,7 @@ def plot_far_field(U_pred_mlp, U_pred_kan, U, x, y, palette, output_dir="figures
     print("Square-ring MAE")
     print("========================================")
     for label, mlp_value, kan_value in zip(ring_labels, mae_mlp, mae_kan):
-        print(f"{label:>6} : MLP = {mlp_value:.6e}    KAN = {kan_value:.6e}")
+        print(f"{label:>6} : MLP = {mlp_value:.{mae_decimals}e}    KAN = {kan_value:.{mae_decimals}e}")
 
     plot_xmin, plot_xmax = -10.0, 10.0
     plot_ymin, plot_ymax = -10.0, 10.0
@@ -48,12 +70,15 @@ def plot_far_field(U_pred_mlp, U_pred_kan, U, x, y, palette, output_dir="figures
     bar_axis = fig.add_subplot(grid[1, :])
     extent = [plot_xmin, plot_xmax, plot_ymin, plot_ymax]
     prediction_images = [
-        axes[0].imshow(maps[0], extent=extent, origin="lower", cmap="RdBu_r", vmin=-1.0, vmax=1.0, aspect="equal"),
-        axes[2].imshow(maps[2], extent=extent, origin="lower", cmap="RdBu_r", vmin=-1.0, vmax=1.0, aspect="equal"),
+        axes[0].imshow(maps[0], extent=extent, origin="lower", cmap="RdBu_r", vmin=u_vmin, vmax=u_vmax, aspect="equal"),
+        axes[2].imshow(maps[2], extent=extent, origin="lower", cmap="RdBu_r", vmin=u_vmin, vmax=u_vmax, aspect="equal"),
     ]
+    # Scale the error colorbar to the errors actually visible in [-10, 10], not the far-field range.
+    if error_vmax is None:
+        error_vmax = max(np.nanmax(maps[1]), np.nanmax(maps[3]))
     error_images = [
-        axes[1].imshow(maps[1], extent=extent, origin="lower", cmap="magma", vmin=0.0, vmax=0.4, aspect="equal"),
-        axes[3].imshow(maps[3], extent=extent, origin="lower", cmap="magma", vmin=0.0, vmax=0.4, aspect="equal"),
+        axes[1].imshow(maps[1], extent=extent, origin="lower", cmap="magma", vmin=error_vmin, vmax=error_vmax, aspect="equal"),
+        axes[3].imshow(maps[3], extent=extent, origin="lower", cmap="magma", vmin=error_vmin, vmax=error_vmax, aspect="equal"),
     ]
 
     for axis in axes:
@@ -70,10 +95,22 @@ def plot_far_field(U_pred_mlp, U_pred_kan, U, x, y, palette, output_dir="figures
 
     axes[0].text(1.2, 1.12, "MLP", transform=axes[0].transAxes, ha="center", va="bottom", fontsize=7)
     axes[2].text(1.2, 1.12, "KAN", transform=axes[2].transAxes, ha="center", va="bottom", fontsize=7)
-    for image, axis, label in zip(prediction_images + error_images,
-                                  [axes[0], axes[2], axes[1], axes[3]],
-                                  [r"$\hat{u}$", r"$\hat{u}$", r"$|\hat{u}-u|$", r"$|\hat{u}-u|$"]):
+    for image, axis, label, n_ticks, vmin, vmax in zip(
+        prediction_images + error_images,
+        [axes[0], axes[2], axes[1], axes[3]],
+        [r"$\hat{u}$", r"$\hat{u}$", r"$|\hat{u}-u|$", r"$|\hat{u}-u|$"],
+        [u_n_ticks, u_n_ticks, error_n_ticks, error_n_ticks],
+        [u_vmin, u_vmin, error_vmin, error_vmin],
+        [u_vmax, u_vmax, error_vmax, error_vmax],
+    ):
         colorbar = fig.colorbar(image, ax=axis, orientation="horizontal", fraction=0.045, pad=0.17, aspect=25)
+        tick_values = np.linspace(vmin, vmax, n_ticks)
+        colorbar.set_ticks(tick_values)
+        if label == r"$\hat{u}$":
+            formatter = ticker.FormatStrFormatter(f"%.{u_tick_decimals}f")
+        else:
+            formatter = ticker.FormatStrFormatter(f"%.{error_tick_decimals}f")
+        colorbar.ax.xaxis.set_major_formatter(formatter)
         colorbar.set_label(label, fontsize=7)
         colorbar.ax.tick_params(axis="x", labelsize=6, colors="gray", length=2, width=0.5)
         colorbar.outline.set_edgecolor("gray")

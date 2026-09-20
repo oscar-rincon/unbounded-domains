@@ -1,0 +1,4 @@
+Exponential vs. uniform sampling: improvement (orders of magnitude, log10(uniform error / exponential error))
+inside  : u  -0.14 | k  -0.06 | combined  -0.10
+outside : u  +0.76 | k  +1.85 | combined  +1.31
+global  : u  +0.64 | k  +1.78 | combined  +1.21

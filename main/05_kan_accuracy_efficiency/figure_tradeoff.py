@@ -3,6 +3,7 @@
 import os
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FixedLocator, StrMethodFormatter
  
 
 def plot_tradeoff(
@@ -154,6 +155,12 @@ def plot_tradeoff(
 
         # Logarithmic y-axis
         ax.set_yscale("log")
+
+        # Use regular FLOP ticks and include 140,000 at the right edge.
+        if x_label == "FLOPs":
+            ax.set_xlim(0, 140000)
+            ax.xaxis.set_major_locator(FixedLocator([0, 70000, 140000]))
+            ax.xaxis.set_major_formatter(StrMethodFormatter("{x:,.0f}"))
 
         # X-axis title: BLACK
         ax.set_xlabel(
