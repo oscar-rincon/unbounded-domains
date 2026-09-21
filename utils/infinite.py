@@ -1228,6 +1228,14 @@ def evaluate_model_inf(
 
     save_plot=False,
     plot_path=None,
+
+    # Manual override for the error colorbar maximums (None = use defaults)
+    err_u_max=None,
+    err_k_max=None,
+
+    # Number of decimal places shown on the error colorbar tick labels
+    err_u_decimals=1,
+    err_k_decimals=2,
 ):
 
     """
@@ -1488,13 +1496,18 @@ def evaluate_model_inf(
 
         print(f"Maximum |u_hat - u|: {np.max(error_u):.6f}")
         print(f"Maximum |k_hat - k|: {np.max(error_k):.6f}")
-        if sampling.lower() == "uniform":
-            err_u_max = 0.4
-            err_k_max = 0.5
 
-        elif sampling.lower() == "gaussian":
-            err_u_max = 0.4
-            err_k_max = 0.02
+        if err_u_max is None:
+            if sampling.lower() == "uniform":
+                err_u_max = 0.4
+            elif sampling.lower() == "gaussian":
+                err_u_max = 0.4
+
+        if err_k_max is None:
+            if sampling.lower() == "uniform":
+                err_k_max = 0.5
+            elif sampling.lower() == "gaussian":
+                err_k_max = 0.02
 
         # --------------------------------------------------------
         # Error colorbar ticks
@@ -1897,11 +1910,11 @@ def evaluate_model_inf(
         )
 
         cbar_err_u.ax.xaxis.set_major_formatter(
-            FormatStrFormatter("%.1f")
+            FormatStrFormatter(f"%.{err_u_decimals}f")
         )
 
         cbar_err_k.ax.xaxis.set_major_formatter(
-            FormatStrFormatter("%.2f")
+            FormatStrFormatter(f"%.{err_k_decimals}f")
         )
 
         cbar_err_k.set_label(
