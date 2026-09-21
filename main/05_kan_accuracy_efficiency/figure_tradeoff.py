@@ -3,7 +3,6 @@
 import os
 
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FixedLocator, StrMethodFormatter
  
 
 def plot_tradeoff(
@@ -11,6 +10,7 @@ def plot_tradeoff(
     df_kan,
     output_dir="figures",
     target_error=1e-2,
+    label_positions=None,
 ):
     """Render and save the accuracy/efficiency comparison figure."""
 
@@ -27,6 +27,14 @@ def plot_tradeoff(
         "spine": "#808080",
         "target_line": "#A6A6A6",
     }
+
+    if label_positions is None:
+        label_positions = {
+            ("neurons", "MLP"): (0.30, 0.86),
+            ("neurons", "KAN"): (0.72, 0.78),
+            ("parameters", "MLP"): (0.30, 0.86),
+            ("parameters", "KAN"): (0.72, 0.78),
+        }
 
     # --------------------------------------------------
     # Prepare data
@@ -48,6 +56,27 @@ def plot_tradeoff(
             ]
         ].mean(axis=1)
 
+    def select_configuration(frame):
+        ordered = frame.sort_values(
+            ["neurons", "parameters"]
+        )
+        achieved = ordered[
+            ordered["err_global_mean"] < target_error
+        ]
+        if not achieved.empty:
+            return achieved.iloc[0]
+        return ordered.loc[
+            (
+                ordered["err_global_mean"]
+                - target_error
+            ).abs().idxmin()
+        ]
+
+    selected = {
+        "MLP": select_configuration(df_mlp),
+        "KAN": select_configuration(df_kan),
+    }
+
     # --------------------------------------------------
     # Figure layout
     # --------------------------------------------------
@@ -64,13 +93,12 @@ def plot_tradeoff(
         hspace=0.75,
     )
 
-    top_grid = grid[0].subgridspec(1, 3, wspace=0.35)
+    top_grid = grid[0].subgridspec(1, 2, wspace=0.35)
     bottom_grid = grid[1].subgridspec(1, 4, wspace=0.7)
 
     axes = [
         fig.add_subplot(top_grid[0, 0]),
         fig.add_subplot(top_grid[0, 1]),
-        fig.add_subplot(top_grid[0, 2]),
         fig.add_subplot(bottom_grid[0, 0]),
         fig.add_subplot(bottom_grid[0, 1]),
         fig.add_subplot(bottom_grid[0, 2]),
@@ -125,24 +153,31 @@ def plot_tradeoff(
             if frame.empty:
                 continue
 
-            # Find first configuration reaching target error.
-            # If none reaches the target, select the closest one.
-            achieved = frame[
-                frame["err_global_mean"] <= target_error
-            ]
-
-            best = (
-                achieved.iloc[0]
-                if not achieved.empty
-                else frame.loc[
-                    (
-                        frame["err_global_mean"]
-                        - target_error
-                    ).abs().idxmin()
-                ]
+            chosen = selected[name]
+            chosen_x = chosen[x_col]
+            chosen_y = chosen["err_global_mean"]
+            ax.scatter(
+                chosen_x,
+                chosen_y,
+                color=color,
+                s=20,
+                zorder=4,
             )
-
- 
+            ax.annotate(
+                f"{int(chosen[x_col]):,}",
+                xy=(chosen_x, chosen_y),
+                xytext=label_positions[(x_col, name)],
+                textcoords="axes fraction",
+                fontsize=6,
+                color=color,
+                ha="center",
+                va="center",
+                arrowprops={
+                    "arrowstyle": "-",
+                    "color": color,
+                    "linewidth": 0.4,
+                },
+            )
 
         # Target-error line
         ax.axhline(
@@ -155,12 +190,6 @@ def plot_tradeoff(
 
         # Logarithmic y-axis
         ax.set_yscale("log")
-
-        # Use regular FLOP ticks and include 140,000 at the right edge.
-        if x_label == "FLOPs":
-            ax.set_xlim(0, 140000)
-            ax.xaxis.set_major_locator(FixedLocator([0, 70000, 140000]))
-            ax.xaxis.set_major_formatter(StrMethodFormatter("{x:,.0f}"))
 
         # X-axis title: BLACK
         ax.set_xlabel(
@@ -200,14 +229,6 @@ def plot_tradeoff(
         axes[1],
         "parameters",
         "Number of Parameters",
-        False,
-        False,
-    )
-
-    plot_accuracy(
-        axes[2],
-        "flop_counter_flops",
-        "FLOPs",
         False,
         True,
     )
@@ -253,13 +274,13 @@ def plot_tradeoff(
         ylabel,
         value_format,
     ) in zip(
-        axes[3:],
+        axes[2:],
         measurements,
     ):
 
         values = [
-            df_mlp[column].mean(),
-            df_kan[column].mean(),
+            selected["MLP"][column],
+            selected["KAN"][column],
         ]
 
         # Bar plot
@@ -342,7 +363,7 @@ def plot_tradeoff(
     # --------------------------------------------------
     # Bottom-row x tick labels: BLACK
     # --------------------------------------------------
-    for ax in axes[3:]:
+    for ax in axes[2:]:
         ax.tick_params(
             axis="x",
             labelcolor="black",
