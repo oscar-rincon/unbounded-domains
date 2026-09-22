@@ -1236,6 +1236,14 @@ def evaluate_model_inf(
     # Number of decimal places shown on the error colorbar tick labels
     err_u_decimals=1,
     err_k_decimals=2,
+
+    # Manual override for the prediction colorbar maximums (u_hat, k_hat)
+    u_max=1.0,
+    k_max=3.0,
+
+    # Number of decimal places shown on the prediction colorbar tick labels
+    u_decimals=1,
+    k_decimals=1,
 ):
 
     """
@@ -1482,11 +1490,11 @@ def evaluate_model_inf(
             eval_ymax,
         ]
 
-        u_vmin = -1
-        u_vmax = 1
+        u_vmin = -u_max
+        u_vmax = u_max
 
         k_vmin = 1
-        k_vmax = 3
+        k_vmax = k_max
 
         # --------------------------------------------------------
         # Error colorbar limits
@@ -1915,6 +1923,14 @@ def evaluate_model_inf(
 
         cbar_err_k.ax.xaxis.set_major_formatter(
             FormatStrFormatter(f"%.{err_k_decimals}f")
+        )
+
+        cbar_u.ax.xaxis.set_major_formatter(
+            FormatStrFormatter(f"%.{u_decimals}f")
+        )
+
+        cbar_k.ax.xaxis.set_major_formatter(
+            FormatStrFormatter(f"%.{k_decimals}f")
         )
 
         cbar_err_k.set_label(
