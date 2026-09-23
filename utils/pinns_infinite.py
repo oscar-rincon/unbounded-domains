@@ -482,6 +482,11 @@ def observation_loss_k(
     K_true,
     criterion):
 
+    # No k observations (e.g. n_obs_k=0): skip the forward pass since some
+    # architectures (KAN) can't reshape a zero-row batch, and there's no loss to compute.
+    if X.shape[0] == 0:
+        return torch.zeros((), device=X.device, dtype=X.dtype)
+
     pred = model_k(X)
 
     mse = criterion(pred, K_true)

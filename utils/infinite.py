@@ -2258,7 +2258,12 @@ def compute_training_errors(
 
         u_pred = model_u(X_obs)
 
-        k_pred = model_k(X_obs_k)
+        # KAN layers can't reshape a zero-row batch; skip the forward pass when
+        # there are no k observations (n_obs_k=0).
+        if X_obs_k.shape[0] == 0:
+            k_pred = k_exact
+        else:
+            k_pred = model_k(X_obs_k)
 
     # Restore original training state
     if was_training_u:
