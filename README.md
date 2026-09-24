@@ -62,10 +62,6 @@ The workflow is summarized in the [graphical abstract](figures/graphical_abstrac
 4. Evaluate errors inside and outside the training region.
 5. Compare accuracy, computational cost, and extrapolation behavior.
 
-## Reproducibility
-
-All experiments use random seed `42` by default. The shared utilities apply it to Python, NumPy, and PyTorch, while dataset generators and Optuna studies receive the same value explicitly. Results are saved in experiment-specific directories with model weights, training histories, summaries, and metrics. Keep seed `42` unchanged when reproducing a result.
-
 ## Citation
 
-If this repository supports your work, please cite the associated paper or project release.
+If this repository supports your work, please cite the associated paper: https://arxiv.org/abs/2512.12074.
