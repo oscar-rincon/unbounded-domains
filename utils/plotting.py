@@ -81,6 +81,7 @@ def annotate_final_value(
     color,
     y_position,
     fmt="{:.2e}",
+    fontsize=6,
 ):
     y = np.asarray(y, dtype=float)
 
@@ -100,13 +101,46 @@ def annotate_final_value(
         # Same color as curve
         color=color,
 
-        fontsize=6.5,
+        fontsize=fontsize,
 
         # Position
         ha="right",
         va="top",
 
     )
+
+
+def set_log_ylim_from_data(
+    ax,
+    series,
+    lower_floor=None,
+    upper_ceiling=None,
+    lower_pad=1.8,
+    upper_pad=3.0,
+):
+    values = []
+
+    for item in series:
+        array = np.asarray(item, dtype=float)
+        array = array[np.isfinite(array) & (array > 0)]
+        if array.size > 0:
+            values.append(array)
+
+    if not values:
+        return
+
+    values = np.concatenate(values)
+    ymin = values.min() / lower_pad
+    ymax = values.max() * upper_pad
+
+    if lower_floor is not None:
+        ymin = max(ymin, lower_floor)
+    if upper_ceiling is not None:
+        ymax = min(ymax, upper_ceiling)
+    if ymin >= ymax:
+        ymin, ymax = values.min() * 0.5, values.max() * 2.0
+
+    ax.set_ylim(ymin, ymax)
 
 def plot_histories_comparison(
     histories,
@@ -280,13 +314,8 @@ def plot_histories_comparison(
                 fontsize=8
             )
 
-        # Legend only in first column
         if col == 0:
-            ax.legend(
-                fontsize=8,
-                frameon=False,
-                loc="upper left"
-            )
+            legend_handles, legend_labels = ax.get_legend_handles_labels()
 
         # ========================================================
         # ROW 1: LOSSES
@@ -418,7 +447,12 @@ def plot_histories_comparison(
             )
 
         ax.set_yscale("log")
-        ax.set_ylim(1e-6, 1000)
+        set_log_ylim_from_data(
+            ax,
+            [u, k, pde],
+            lower_floor=1e-7,
+            upper_ceiling=1e3,
+        )
 
         if col == 0:
             ax.set_ylabel(
@@ -524,7 +558,12 @@ def plot_histories_comparison(
                 color=palette["text_muted"]
             )
 
-        ax.set_ylim(1e-2, 1e2)
+        set_log_ylim_from_data(
+            ax,
+            [err_u, err_k],
+            lower_floor=1e-4,
+            upper_ceiling=1e2,
+        )
 
         if col == 0:
             ax.set_ylabel(
@@ -548,14 +587,27 @@ def plot_histories_comparison(
         ax.tick_params(
             axis="both",
             which="both",
-            labelsize=8
+            labelsize=6
+        )
+
+    if legend_handles:
+        fig.legend(
+            legend_handles,
+            legend_labels,
+            fontsize=6,
+            frameon=False,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.01),
+            ncol=3,
+            handlelength=1.6,
+            columnspacing=1.2,
         )
 
     # ============================================================
     # LAYOUT
     # ============================================================
 
-    plt.tight_layout()
+    plt.tight_layout(rect=(0, 0, 1, 0.96))
 
     if save_path is not None:
 
