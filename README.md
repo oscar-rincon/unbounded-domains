@@ -49,7 +49,7 @@ main/02_hyperparameter_tunning Optuna studies and hyperparameter plots
 main/03_individual_prediction  Individual trained-model predictions
 main/04_sampling_approximation Sampling and approximation experiments
 main/05_kan_accuracy_efficiency Model accuracy and efficiency comparisons
-figures/                       Graphical abstract and publication figures
+figures/                       Publication figures
 ```
 
 ## Methodology
