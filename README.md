@@ -1,6 +1,6 @@
 # Evaluation of Sampling Strategies and Physics-Informed Kolmogorov-Arnold Networks in Unbounded Domains
 
-Physics-informed neural networks (PINNs) and Kolmogorov-Arnold networks (KANs) for inverse PDE problems on infinite and semi-infinite domains.
+Study of sampling distributions and network architectures for inverse problems in unbounded domains.
 
 ![Graphical abstract](figures/graphical_abstract.png)
 
@@ -54,7 +54,7 @@ figures/                       Publication figures
 
 ## Methodology
 
-The workflow is summarized in the [graphical abstract](figures/graphical_abstract.svg) and the [methodology schematic](figures/schematic_methodology.svg):
+Our workflow is:
 
 1. Define analytical solutions and variable coefficients on the target domain.
 2. Generate sparse observations and PDE collocation points using the selected sampling strategy.
