@@ -4,6 +4,8 @@ Study of sampling distributions and network architectures for inverse problems i
 
 ![Graphical abstract](figures/graphical_abstract.png)
 
+[![DOI](https://zenodo.org/badge/1285542736.svg)](https://doi.org/10.5281/zenodo.23087247)
+
 ## Overview
 
 This repository studies the recovery of a spatially varying coefficient from sparse observations and PDE residuals. It includes:
