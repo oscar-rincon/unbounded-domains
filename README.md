@@ -66,4 +66,4 @@ Our workflow is:
 
 ## Citation
 
-If this repository supports your work, please cite the associated paper: https://arxiv.org/abs/2512.12074.
+If you use this repository, its methods, or any of its figures, please cite the relevant work listed in [CITATIONS.md](CITATIONS.md).  
